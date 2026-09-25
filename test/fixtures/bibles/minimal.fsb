@@ -1,0 +1,19 @@
+{
+  "name": "Fictional FSB",
+  "books": [
+    {
+      "number": 43,
+      "name": "John",
+      "chapters": [
+        {
+          "number": 3,
+          "verses": [
+            {"number": 15, "text": "Everyone who trusts the promised light may share lasting life."},
+            {"number": 16, "text": "The Maker cherished the world and offered the beloved Son."},
+            {"number": 17, "text": "The Son came to restore the world, not to condemn it."}
+          ]
+        }
+      ]
+    }
+  ]
+}

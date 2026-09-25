@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XMLBIBLE biblename="Fictional XML">
+  <BIBLEBOOK bnumber="43" bname="John">
+    <CHAPTER cnumber="3">
+      <VERS vnumber="15">All who rely on the promised light can receive enduring life.</VERS>
+      <VERS vnumber="16">The Creator treasured the world and gave the dearly loved Son.</VERS>
+      <VERS vnumber="17">The Son entered the world to rescue it rather than judge it.</VERS>
+    </CHAPTER>
+  </BIBLEBOOK>
+</XMLBIBLE>
