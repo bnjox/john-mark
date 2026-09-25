@@ -46,3 +46,9 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Private and generated scripture data
+/private/bibles/
+/private/evaluation/
+/assets/bibles.db
+*.env
