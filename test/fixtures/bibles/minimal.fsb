@@ -1,4 +1,4 @@
-{
+["fixture-document-id", {
   "name": "Fictional FSB",
   "books": [
     {
@@ -16,4 +16,4 @@
       ]
     }
   ]
-}
+}]

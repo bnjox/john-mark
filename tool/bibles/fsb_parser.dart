@@ -12,20 +12,41 @@ class FsbParser {
       throw FormatException('${file.path}: JSON: ${error.message}');
     }
 
-    final root = _map(decoded, file.path, r'$');
-    _allowKeys(root, const {'name', 'books'}, file.path, r'$');
-    final name = _string(root['name'], file.path, r'$.name');
-    final rawBooks = _list(root['books'], file.path, r'$.books');
+    final envelope = _list(decoded, file.path, r'$');
+    if (envelope.length != 2) {
+      _fail(file.path, r'$', 'must contain a document ID and Bible object');
+    }
+    _string(envelope[0], file.path, r'$[0]');
+    const rootLocation = r'$[1]';
+    final root = _map(envelope[1], file.path, rootLocation);
+    _allowKeys(
+      root,
+      const {
+        'name',
+        'copyright',
+        'books',
+        'version',
+        'metadata',
+        'id',
+        'bookId',
+        'book',
+        'chapter',
+        'verses',
+        'activeVerses',
+      },
+      file.path,
+      rootLocation,
+    );
+    final name = _string(root['name'], file.path, '$rootLocation.name');
+    final rawBooks = _list(root['books'], file.path, '$rootLocation.books');
     if (rawBooks.isEmpty) {
-      _fail(file.path, r'$.books', 'must not be empty');
+      _fail(file.path, '$rootLocation.books', 'must not be empty');
     }
 
     final bookNumbers = <int>{};
     final books = <SourceBook>[];
     for (var bookIndex = 0; bookIndex < rawBooks.length; bookIndex++) {
-      final location =
-          r'$.books['
-          '$bookIndex]';
+      final location = '$rootLocation.books[$bookIndex]';
       final rawBook = _map(rawBooks[bookIndex], file.path, location);
       _allowKeys(
         rawBook,
@@ -93,12 +114,11 @@ class FsbParser {
         if (rawVerses.isEmpty) {
           _fail(file.path, '$chapterLocation.verses', 'must not be empty');
         }
-        chapters.add(
-          SourceChapter(
-            number: chapterNumber,
-            verses: _parseVerses(rawVerses, file.path, chapterLocation),
-          ),
-        );
+        final verses = _parseVerses(rawVerses, file.path, chapterLocation);
+        if (verses.isEmpty) {
+          _fail(file.path, '$chapterLocation.verses', 'has no verse text');
+        }
+        chapters.add(SourceChapter(number: chapterNumber, verses: verses));
       }
       books.add(SourceBook(number: number, name: bookName, chapters: chapters));
     }
@@ -135,13 +155,14 @@ class FsbParser {
       if (endNumber < number) {
         _fail(filePath, '$location.endNumber', 'must not precede number');
       }
-      verses.add(
-        SourceVerse(
-          number: number,
-          endNumber: endNumber,
-          text: _string(rawVerse['text'], filePath, '$location.text'),
-        ),
-      );
+      final textValue = rawVerse['text'];
+      if (textValue is! String) {
+        _fail(filePath, '$location.text', 'must be a string');
+      }
+      final text = textValue.trim();
+      // FreeShow keeps empty placeholders for verses omitted by a translation.
+      if (text.isEmpty) continue;
+      verses.add(SourceVerse(number: number, endNumber: endNumber, text: text));
     }
     return verses;
   }
@@ -175,10 +196,15 @@ List<Object?> _list(Object? value, String file, String location) {
 }
 
 int _positiveInt(Object? value, String file, String location) {
-  if (value is! int || value <= 0) {
+  final parsed = switch (value) {
+    int number => number,
+    String text when RegExp(r'^[0-9]+$').hasMatch(text) => int.parse(text),
+    _ => null,
+  };
+  if (parsed == null || parsed <= 0) {
     _fail(file, location, 'must be a positive integer');
   }
-  return value;
+  return parsed;
 }
 
 String _string(Object? value, String file, String location) {

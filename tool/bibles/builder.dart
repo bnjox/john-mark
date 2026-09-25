@@ -122,7 +122,7 @@ class BibleBuilder {
   String _nameLocation(File source) =>
       path.extension(source.path).toLowerCase() == '.xml'
       ? '/XMLBIBLE/@biblename'
-      : r'$.name';
+      : r'$[1].name';
 }
 
 class _ParsedBible {

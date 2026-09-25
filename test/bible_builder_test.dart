@@ -21,7 +21,8 @@ void main() {
 
   Future<File> writeJson(String name, Object value) async {
     final file = File('${temporaryDirectory.path}/$name');
-    await file.writeAsString(jsonEncode(value));
+    final encoded = name.endsWith('.fsb') ? ['test-document-id', value] : value;
+    await file.writeAsString(jsonEncode(encoded));
     return file;
   }
 
@@ -114,9 +115,52 @@ void main() {
             .having(
               (error) => error.message,
               'message',
-              contains(r'$.books[0].number'),
+              contains(r'$[1].books[0].number'),
             ),
       ),
+    );
+  });
+
+  test('accepts FreeShow string numbering and omitted verse slots', () async {
+    final source = await writeJson('real-shape.fsb', {
+      'name': 'Real Shape',
+      'copyright': '',
+      'version': '1',
+      'metadata': <String, Object>{},
+      'id': 'bible-id',
+      'bookId': 43,
+      'book': 'John',
+      'chapter': '3',
+      'verses': <String, Object>{},
+      'activeVerses': <Object>[],
+      'books': [
+        {
+          'number': '43',
+          'name': 'John',
+          'chapters': [
+            {
+              'number': '3',
+              'verses': [
+                {'number': '15', 'text': 'Kept verse.'},
+                {'number': '16', 'text': ''},
+                {'number': '17', 'text': 'Another kept verse.'},
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    final output = '${temporaryDirectory.path}/real-shape.db';
+
+    await BibleBuilder().build([source], output);
+
+    final database = sqlite3.open(output, mode: OpenMode.readOnly);
+    addTearDown(database.close);
+    expect(
+      database
+          .select('SELECT start_verse FROM passages ORDER BY start_verse')
+          .map((row) => row['start_verse']),
+      [15, 17],
     );
   });
 
@@ -155,7 +199,7 @@ void main() {
               .having(
                 (error) => error.message,
                 'message',
-                contains(r'$.books[0].chapters[0].verses[0].text'),
+                contains(r'$[1].books[0].chapters[0].verses[0].text'),
               ),
         ),
       );
@@ -195,7 +239,7 @@ void main() {
             .having(
               (error) => error.message,
               'message',
-              contains(r'$.unexpected'),
+              contains(r'$[1].unexpected'),
             ),
       ),
     );
@@ -252,7 +296,11 @@ void main() {
       throwsA(
         isA<FormatException>()
             .having((error) => error.message, 'message', contains(second.path))
-            .having((error) => error.message, 'message', contains(r'$.name')),
+            .having(
+              (error) => error.message,
+              'message',
+              contains(r'$[1].name'),
+            ),
       ),
     );
   });
@@ -284,7 +332,7 @@ void main() {
             ...(_singleVerseBible('unused')['books']! as List<Object>),
           ],
         },
-        r'$.books[1].number',
+        r'$[1].books[1].number',
       ),
       (
         'duplicate-chapter',
@@ -292,35 +340,28 @@ void main() {
           _chapter(1, [_verse(1)]),
           _chapter(1, [_verse(2)]),
         ]),
-        r'$.books[0].chapters[1].number',
+        r'$[1].books[0].chapters[1].number',
       ),
       (
         'duplicate-verse',
         _bibleWithChapters('Duplicate Verse', [
           _chapter(1, [_verse(1), _verse(1)]),
         ]),
-        r'$.books[0].chapters[0].verses[1].number',
+        r'$[1].books[0].chapters[0].verses[1].number',
       ),
       (
         'non-positive',
         _bibleWithChapters('Non Positive', [
           _chapter(0, [_verse(1)]),
         ]),
-        r'$.books[0].chapters[0].number',
-      ),
-      (
-        'empty-text',
-        _bibleWithChapters('Empty Text', [
-          _chapter(1, [_verse(1, text: '  ')]),
-        ]),
-        r'$.books[0].chapters[0].verses[0].text',
+        r'$[1].books[0].chapters[0].number',
       ),
       (
         'reversed-range',
         _bibleWithChapters('Reversed Range', [
           _chapter(1, [_verse(4, endNumber: 3)]),
         ]),
-        r'$.books[0].chapters[0].verses[0].endNumber',
+        r'$[1].books[0].chapters[0].verses[0].endNumber',
       ),
     ];
 
