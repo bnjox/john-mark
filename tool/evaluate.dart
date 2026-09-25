@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:guide/core/models.dart';
-import 'package:guide/features/bible/bible_repository.dart';
-import 'package:guide/features/matching/scripture_matcher.dart';
+import 'package:john_mark/core/models.dart';
+import 'package:john_mark/features/bible/bible_repository.dart';
+import 'package:john_mark/features/matching/scripture_matcher.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 const _usage =

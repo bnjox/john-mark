@@ -1,4 +1,4 @@
-# Mobile Scripture Listener Implementation Plan
+# John Mark Mobile App Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -57,7 +57,7 @@
 - Replace: `test/widget_test.dart`
 
 **Interfaces:**
-- Produces: `ScriptureListenerApp`, `SessionPhase`, `ConfidenceBand`, `Translation`, `ScriptureReference`, `Passage`, `MatchCandidate`, `MatchUpdate`, `TranscriptUpdate`, `ListenerViewState`.
+- Produces: `JohnMarkApp`, `SessionPhase`, `ConfidenceBand`, `Translation`, `ScriptureReference`, `Passage`, `MatchCandidate`, `MatchUpdate`, `TranscriptUpdate`, `ListenerViewState`.
 
 - [ ] **Step 1: Initialize Git and preserve the baseline**
 
@@ -85,13 +85,13 @@ Append:
 - [ ] **Step 4: Write the failing smoke test**
 
 ```dart
-await tester.pumpWidget(const ScriptureListenerApp(home: Text('Ready')));
-expect(find.text('Scripture Listener'), findsOneWidget);
+await tester.pumpWidget(const JohnMarkApp(home: Text('Ready')));
+expect(find.text('John Mark'), findsOneWidget);
 expect(find.text('Ready'), findsOneWidget);
 ```
 
 Run: `flutter test test/widget_test.dart`  
-Expected: FAIL because `ScriptureListenerApp` does not exist.
+Expected: FAIL because `JohnMarkApp` does not exist.
 
 - [ ] **Step 5: Add exact shared contracts**
 
@@ -109,7 +109,7 @@ class ListenerViewState { const ListenerViewState({this.phase = SessionPhase.rea
 
 - [ ] **Step 6: Replace the demo shell**
 
-Create a dark Material 3 `ScriptureListenerApp` titled “Scripture Listener” with a required `home`. Replace `main.dart` with `WidgetsFlutterBinding.ensureInitialized()` and a temporary centered Ready screen.
+Create a dark Material 3 `JohnMarkApp` titled “John Mark” with a required `home`. Replace `main.dart` with `WidgetsFlutterBinding.ensureInitialized()` and a temporary centered Ready screen.
 
 - [ ] **Step 7: Verify and commit**
 
@@ -287,7 +287,7 @@ Use `AudioRecorder` with PCM16, 16kHz, mono, noise suppression, no file path. Re
 
 - [ ] **Step 5: Configure platforms**
 
-Android: `RECORD_AUDIO`, `INTERNET`, label Scripture Listener. iOS: microphone usage text “Scripture Listener uses the microphone to identify Bible passages during a live sermon.” Set display name; no background audio mode.
+Android: `RECORD_AUDIO`, `INTERNET`, label John Mark. iOS: microphone usage text “John Mark uses the microphone to identify Bible passages during a live sermon.” Set display name; no background audio mode.
 
 - [ ] **Step 6: Verify and commit**
 

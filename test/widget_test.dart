@@ -3,12 +3,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:guide/app.dart';
-import 'package:guide/core/models.dart';
-import 'package:guide/features/bible/bible_repository.dart';
-import 'package:guide/features/listener/listener_screen.dart';
-import 'package:guide/features/session/session_controller.dart';
-import 'package:guide/features/transcription/transcription.dart';
+import 'package:john_mark/app.dart';
+import 'package:john_mark/core/models.dart';
+import 'package:john_mark/features/bible/bible_repository.dart';
+import 'package:john_mark/features/listener/listener_screen.dart';
+import 'package:john_mark/features/session/session_controller.dart';
+import 'package:john_mark/features/transcription/transcription.dart';
 
 void main() {
   testWidgets('runs the primary listener flow at phone and tablet sizes', (
@@ -33,7 +33,7 @@ void main() {
             size: size,
             textScaler: const TextScaler.linear(2),
           ),
-          child: ScriptureListenerApp(
+          child: JohnMarkApp(
             home: ListenerScreen(
               controller: controller,
               repository: repository,
@@ -51,6 +51,7 @@ void main() {
     }
 
     await pumpAt(const Size(390, 844));
+    expect(find.text('John Mark'), findsOneWidget);
     expect(find.text('Ready'), findsOneWidget);
     expect(find.text('New King James Version'), findsOneWidget);
     expect(find.text('Start Listening'), findsOneWidget);
@@ -140,7 +141,7 @@ void main() {
   testWidgets('forwards non-resumed lifecycle states', (tester) async {
     final controller = _FakeSessionController();
     await tester.pumpWidget(
-      ScriptureListenerApp(
+      JohnMarkApp(
         home: ListenerScreen(
           controller: controller,
           repository: _FakeBibleRepository(),
@@ -165,7 +166,7 @@ void main() {
   ) async {
     final controller = _FakeSessionController();
     await tester.pumpWidget(
-      ScriptureListenerApp(
+      JohnMarkApp(
         home: ListenerScreen(
           controller: controller,
           repository: _FakeBibleRepository(),

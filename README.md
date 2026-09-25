@@ -1,9 +1,9 @@
-# Scripture Listener
+# John Mark
 
-Scripture Listener is an internal Android/iPhone Flutter app for a live sermon
-operator. It streams foreground microphone audio to Deepgram Nova-3, searches
-the selected bundled Bible translation on-device, and displays precision-first
-explicit-reference or close-quotation matches.
+John Mark is an internal Android/iPhone Flutter app and live scripture companion
+for a sermon operator. It streams foreground microphone audio to Deepgram
+Nova-3, searches the selected bundled Bible translation on-device, and displays
+precision-first explicit-reference or close-quotation matches.
 
 ## Architecture and privacy
 

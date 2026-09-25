@@ -131,10 +131,7 @@ class _ListenerScreenState extends State<ListenerScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scripture Listener'),
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('John Mark'), centerTitle: false),
       body: SafeArea(
         top: false,
         child: ListenableBuilder(

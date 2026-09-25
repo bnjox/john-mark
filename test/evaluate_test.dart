@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:guide/core/models.dart';
-import 'package:guide/features/bible/bible_repository.dart';
+import 'package:john_mark/core/models.dart';
+import 'package:john_mark/features/bible/bible_repository.dart';
 
 import '../tool/evaluate.dart' as evaluator;
 

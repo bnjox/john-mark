@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:guide/core/models.dart';
-import 'package:guide/features/session/bounded_audio_queue.dart';
-import 'package:guide/features/session/session_controller.dart';
-import 'package:guide/features/transcription/transcription.dart';
+import 'package:john_mark/core/models.dart';
+import 'package:john_mark/features/session/bounded_audio_queue.dart';
+import 'package:john_mark/features/session/session_controller.dart';
+import 'package:john_mark/features/transcription/transcription.dart';
 
 const _translation = Translation(id: 'test', name: 'Test');
 

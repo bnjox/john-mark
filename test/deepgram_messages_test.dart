@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:guide/features/transcription/deepgram_messages.dart';
-import 'package:guide/features/transcription/deepgram_client.dart';
-import 'package:guide/features/transcription/transcription.dart';
+import 'package:john_mark/features/transcription/deepgram_messages.dart';
+import 'package:john_mark/features/transcription/deepgram_client.dart';
+import 'package:john_mark/features/transcription/transcription.dart';
 
 void main() {
   group('DeepgramMessageDecoder', () {

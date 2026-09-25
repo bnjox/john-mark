@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:guide/core/models.dart';
-import 'package:guide/features/bible/bible_repository.dart';
-import 'package:guide/features/matching/match_stabilizer.dart';
-import 'package:guide/features/matching/quote_matcher.dart';
-import 'package:guide/features/matching/reference_parser.dart';
-import 'package:guide/features/matching/scripture_matcher.dart';
+import 'package:john_mark/core/models.dart';
+import 'package:john_mark/features/bible/bible_repository.dart';
+import 'package:john_mark/features/matching/match_stabilizer.dart';
+import 'package:john_mark/features/matching/quote_matcher.dart';
+import 'package:john_mark/features/matching/reference_parser.dart';
+import 'package:john_mark/features/matching/scripture_matcher.dart';
 
 void main() {
   const john316 = Passage(

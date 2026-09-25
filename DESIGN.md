@@ -1,5 +1,5 @@
 ---
-name: Scripture Listener
+name: John Mark
 description: A restrained, scripture-first dark console for live sermon operators.
 colors:
   warm-amber-seed: "#D6A84B"
@@ -52,13 +52,13 @@ components:
     padding: "24dp 16dp"
 ---
 
-# Design System: Scripture Listener
+# Design System: John Mark
 
 ## Overview
 
 **Creative North Star: "The Quiet Operator Console"**
 
-Scripture Listener is an adaptive native Flutter interface for a dim, long-running production environment. Its visual language is restrained and operational: a near-black foundation, semantic Material 3 surfaces, one warm amber seed for action and live-state emphasis, and no decorative religious imagery. Native controls and platform behavior carry more authority than custom styling.
+John Mark is an adaptive native Flutter interface for a dim, long-running production environment. Its visual language is restrained and operational: a near-black foundation, semantic Material 3 surfaces, one warm amber seed for action and live-state emphasis, and no decorative religious imagery. Native controls and platform behavior carry more authority than custom styling.
 
 The hierarchy is scripture-first. The current detected reference and passage are the strongest reading moment; alternatives follow, while transcript and privacy copy remain clearly supporting information. Confidence is expressed in plain language instead of scores, and every featured result explicitly says whether it is current or stale.
 

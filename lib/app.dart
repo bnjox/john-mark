@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-class ScriptureListenerApp extends StatelessWidget {
-  const ScriptureListenerApp({required this.home, super.key});
+class JohnMarkApp extends StatelessWidget {
+  const JohnMarkApp({required this.home, super.key});
 
   final Widget home;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Scripture Listener',
+      title: 'John Mark',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

@@ -12,7 +12,7 @@ Church AV operators using a phone during a live sermon to identify scripture qui
 
 ## Product Purpose
 
-Scripture Listener captures foreground microphone audio, transcribes it live, and displays precision-first scripture matches from the operator's selected bundled translation. Success means a useful passage appears promptly when evidence is strong while uncertain or unrelated speech produces no result.
+John Mark captures foreground microphone audio, transcribes it live, and displays precision-first scripture matches from the operator's selected bundled translation. Success means a useful passage appears promptly when evidence is strong while uncertain or unrelated speech produces no result.
 
 ## Positioning
 
@@ -34,7 +34,7 @@ The app is used for 60–90 minute sermons in a dim AV environment. The operator
 
 ## Brand Commitments
 
-The product name is **Scripture Listener**. The approved interface direction is a restrained dark operator console with high contrast, scripture-first hierarchy, warm amber status/action accents, and native platform expectations.
+The product name is **John Mark**, described as a **Live Scripture Companion**. The approved interface direction is a restrained dark operator console with high contrast, scripture-first hierarchy, warm amber status/action accents, and native platform expectations.
 
 ## Evidence on Hand
 

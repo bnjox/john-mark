@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-09-25T03:57:24Z",
-  "title": "Design System: Scripture Listener",
+  "title": "Design System: John Mark",
   "extensions": {
     "colorMeta": {
       "warm-amber-seed": {
@@ -114,7 +114,7 @@
   ],
   "narrative": {
     "northStar": "The Quiet Operator Console",
-    "overview": "Scripture Listener is an adaptive native Flutter interface for a dim, long-running production environment. Its visual language is restrained and operational: a near-black foundation, semantic Material 3 surfaces, one warm amber seed for action and live-state emphasis, and no decorative religious imagery. Native controls and platform behavior carry more authority than custom styling.\n\nThe hierarchy is scripture-first. The current detected reference and passage are the strongest reading moment; alternatives follow, while transcript and privacy copy remain clearly supporting information. Confidence is expressed in plain language instead of scores, and every featured result explicitly says whether it is current or stale.",
+    "overview": "John Mark is an adaptive native Flutter interface for a dim, long-running production environment. Its visual language is restrained and operational: a near-black foundation, semantic Material 3 surfaces, one warm amber seed for action and live-state emphasis, and no decorative religious imagery. Native controls and platform behavior carry more authority than custom styling.\n\nThe hierarchy is scripture-first. The current detected reference and passage are the strongest reading moment; alternatives follow, while transcript and privacy copy remain clearly supporting information. Confidence is expressed in plain language instead of scores, and every featured result explicitly says whether it is current or stale.",
     "keyCharacteristics": [
       "Adaptive native Flutter with Material 3 controls and safe-area-aware layouts.",
       "Restrained dark tonal surfaces with warm amber reserved for action, live state, and confidence.",

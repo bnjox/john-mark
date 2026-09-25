@@ -29,7 +29,7 @@ Future<void> main() async {
           .match(text),
     );
     runApp(
-      ScriptureListenerApp(
+      JohnMarkApp(
         home: ListenerScreen(
           controller: controller,
           repository: repository,
@@ -40,7 +40,7 @@ Future<void> main() async {
       ),
     );
   } catch (_) {
-    runApp(const ScriptureListenerApp(home: _MissingBibleScreen()));
+    runApp(const JohnMarkApp(home: _MissingBibleScreen()));
   }
 }
 
@@ -50,7 +50,7 @@ class _MissingBibleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scripture Listener')),
+      appBar: AppBar(title: const Text('John Mark')),
       body: SafeArea(
         child: Center(
           child: Padding(

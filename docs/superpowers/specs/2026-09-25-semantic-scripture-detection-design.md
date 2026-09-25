@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Improve Scripture Listener so it can identify scripture when a preacher uses
+Improve John Mark so it can identify scripture when a preacher uses
 different wording or a paraphrase. Detection will use every bundled Bible
 translation and an on-device semantic model, while displayed scripture remains
 canonical Bible text from NKJV.

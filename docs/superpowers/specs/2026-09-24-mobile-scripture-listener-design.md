@@ -1,4 +1,4 @@
-# Mobile Scripture Listener Design
+# John Mark Mobile App Design
 
 **Date:** 2026-09-24  
 **Status:** Approved
@@ -199,7 +199,7 @@ The three-second target begins when enough identifying words have been spoken. I
 
 ```text
 +---------------------------------+
-| Scripture Listener       Ready ●|
+| John Mark                Ready ●|
 +---------------------------------+
 | Translation                     |
 | [ NKJV                       ▾ ] |
