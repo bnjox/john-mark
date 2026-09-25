@@ -11,13 +11,15 @@ class BoundedAudioQueue {
 
   int get length => _frames.length;
 
-  void add(Uint8List frame) {
+  bool add(Uint8List frame) {
     if (_waiters.isNotEmpty) {
       _waiters.removeFirst().complete(frame);
-      return;
+      return false;
     }
-    if (_frames.length == capacity) _frames.removeFirst();
+    final dropped = _frames.length == capacity;
+    if (dropped) _frames.removeFirst();
     _frames.addLast(frame);
+    return dropped;
   }
 
   Future<Uint8List?> take() {

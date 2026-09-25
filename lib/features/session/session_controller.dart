@@ -54,6 +54,8 @@ class SessionController extends ChangeNotifier {
   bool _active = false;
   bool _captureStarted = false;
   bool _disposed = false;
+  bool _delayNoticeScheduled = false;
+  bool _liveNoticeScheduled = false;
   _MatchWork? _matchWork;
 
   ListenerViewState get state => _state;
@@ -87,6 +89,8 @@ class SessionController extends ChangeNotifier {
 
     try {
       await _connectAndCapture(generation);
+    } on _AudioCaptureException {
+      if (_isCurrent(generation)) await _failCapture(generation);
     } on TranscriptionOpenException catch (error) {
       if (!_isCurrent(generation)) return;
       if (error.isTerminal) {
@@ -126,13 +130,20 @@ class SessionController extends ChangeNotifier {
       ),
     );
 
-    final audio = await audioSource.start();
+    final Stream<Uint8List> audio;
+    try {
+      audio = await audioSource.start();
+    } catch (_) {
+      throw const _AudioCaptureException();
+    }
     if (!_isCurrent(generation)) {
       await _releaseConnection();
       return;
     }
     _captureStarted = true;
-    _audioSubscription = audio.listen(_audioQueue.add);
+    _audioSubscription = audio.listen(
+      (frame) => _onAudioFrame(frame, generation),
+    );
     unawaited(_pumpAudio(connection, generation));
     _reconnectAttempt = 0;
     _startedAt ??= DateTime.now();
@@ -153,6 +164,7 @@ class SessionController extends ChangeNotifier {
       }
       try {
         await connection.send(frame);
+        _markLiveIfCaughtUp(generation);
       } catch (_) {
         unawaited(_serialize(() => _beginReconnect(generation)));
         return;
@@ -228,6 +240,8 @@ class SessionController extends ChangeNotifier {
         }
         try {
           await _connectAndCapture(generation);
+        } on _AudioCaptureException {
+          await _failCapture(generation);
         } on TranscriptionOpenException catch (error) {
           await _releaseConnection();
           if (!_isCurrent(generation)) return;
@@ -264,6 +278,24 @@ class SessionController extends ChangeNotifier {
     );
   }
 
+  Future<void> _failCapture(int generation) async {
+    await _releaseConnection();
+    if (!_isCurrent(generation)) return;
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
+    _active = false;
+    _cancelMatching();
+    resetMatcher();
+    ++_generation;
+    _setState(
+      _copyState(
+        phase: SessionPhase.serviceError,
+        message:
+            'Microphone capture could not start. Check the device audio input.',
+      ),
+    );
+  }
+
   Future<void> _releaseConnection() async {
     _audioQueue.clear();
     await _audioSubscription?.cancel();
@@ -287,7 +319,42 @@ class SessionController extends ChangeNotifier {
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
     _startedAt = null;
+    _delayNoticeScheduled = false;
+    _liveNoticeScheduled = false;
     resetMatcher();
+  }
+
+  void _onAudioFrame(Uint8List frame, int generation) {
+    final dropped = _audioQueue.add(frame);
+    if (!dropped || _delayNoticeScheduled) return;
+    _delayNoticeScheduled = true;
+    unawaited(
+      _serialize(() async {
+        _delayNoticeScheduled = false;
+        if (_isCurrent(generation) && _state.phase == SessionPhase.listening) {
+          _setState(_copyState(phase: SessionPhase.delayed));
+        }
+      }),
+    );
+  }
+
+  void _markLiveIfCaughtUp(int generation) {
+    if (_state.phase != SessionPhase.delayed ||
+        _audioQueue.length > _audioQueue.capacity ~/ 2 ||
+        _liveNoticeScheduled) {
+      return;
+    }
+    _liveNoticeScheduled = true;
+    unawaited(
+      _serialize(() async {
+        _liveNoticeScheduled = false;
+        if (_isCurrent(generation) &&
+            _state.phase == SessionPhase.delayed &&
+            _audioQueue.length <= _audioQueue.capacity ~/ 2) {
+          _setState(_copyState(phase: SessionPhase.listening));
+        }
+      }),
+    );
   }
 
   void _scheduleMatch(int generation, String finalizedText) {
@@ -438,4 +505,8 @@ class _MatchWork {
   final int generation;
   bool inFlight = false;
   String? pendingText;
+}
+
+class _AudioCaptureException implements Exception {
+  const _AudioCaptureException();
 }

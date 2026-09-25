@@ -97,12 +97,14 @@ void main() {
       await _flush();
 
       expect(connection.sent.map((frame) => frame.single), [0]);
+      expect(fixture.controller.state.phase, SessionPhase.delayed);
       connection.sendGate!.complete();
       await _flush(80);
       expect(connection.sent, hasLength(65));
       expect(connection.sent.skip(1).map((frame) => frame.single), [
         for (var value = 7; value <= 70; value++) value,
       ]);
+      expect(fixture.controller.state.phase, SessionPhase.listening);
       await fixture.controller.stop();
     },
   );
@@ -230,6 +232,20 @@ void main() {
     expect(fixture.controller.state.message, contains('authentication'));
     expect(fixture.client.openCount, 1);
     expect(fixture.audio.startCount, 0);
+    expect(delayCalls, 0);
+  });
+
+  test('capture failure stops without scheduling a reconnect', () async {
+    var delayCalls = 0;
+    final fixture = _Fixture(reconnectDelay: (_) async => delayCalls++);
+    fixture.audio.startError = StateError('no input');
+
+    await fixture.controller.start(_translation);
+
+    expect(fixture.controller.state.phase, SessionPhase.serviceError);
+    expect(fixture.controller.state.message, contains('Microphone capture'));
+    expect(fixture.client.openCount, 1);
+    expect(fixture.client.connections.single.closeCount, 1);
     expect(delayCalls, 0);
   });
 
@@ -369,6 +385,7 @@ class _FakeAudioSource implements AudioSource {
   int startCount = 0;
   int stopCount = 0;
   bool permission = true;
+  Object? startError;
   final List<StreamController<Uint8List>> streams = [];
 
   @override
@@ -377,6 +394,7 @@ class _FakeAudioSource implements AudioSource {
   @override
   Future<Stream<Uint8List>> start() async {
     startCount++;
+    if (startError case final error?) throw error;
     final stream = StreamController<Uint8List>.broadcast();
     streams.add(stream);
     return stream.stream;
