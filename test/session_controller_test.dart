@@ -54,6 +54,28 @@ void main() {
     expect(fixture.controller.state.phase, SessionPhase.stopped);
   });
 
+  test(
+    'stop updates immediately while a connection attempt is pending',
+    () async {
+      final fixture = _Fixture();
+      final gate = Completer<TranscriptionConnection>();
+      fixture.client.openGate = gate;
+
+      final start = fixture.controller.start(_translation);
+      await _flush();
+      expect(fixture.controller.state.phase, SessionPhase.connecting);
+
+      final stop = fixture.controller.stop();
+      expect(fixture.controller.state.phase, SessionPhase.stopped);
+
+      final connection = _FakeConnection();
+      gate.complete(connection);
+      await Future.wait([start, stop]);
+      expect(connection.closeCount, 1);
+      expect(fixture.audio.startCount, 0);
+    },
+  );
+
   test('slow matching does not block stop or apply a stale result', () async {
     final matchResult = Completer<MatchUpdate?>();
     final matchStarted = Completer<void>();
@@ -249,6 +271,19 @@ void main() {
     expect(delayCalls, 0);
   });
 
+  test('runtime capture failure stops and closes the connection', () async {
+    final fixture = _Fixture();
+    await fixture.controller.start(_translation);
+
+    fixture.audio.streams.single.addError(StateError('input lost'));
+    await _flush();
+
+    expect(fixture.controller.state.phase, SessionPhase.serviceError);
+    expect(fixture.controller.state.message, contains('Microphone capture'));
+    expect(fixture.client.connections.single.closeCount, 1);
+    expect(fixture.audio.stopCount, 1);
+  });
+
   test('resets matcher state at start and stop boundaries', () async {
     var resets = 0;
     final fixture = _Fixture(resetMatcher: () => resets++);
@@ -408,12 +443,14 @@ class _FakeTranscriptionClient implements TranscriptionClient {
   int openCount = 0;
   bool failOpenAfterFirst = false;
   Object? openError;
+  Completer<TranscriptionConnection>? openGate;
   final List<_FakeConnection> connections = [];
 
   @override
   Future<TranscriptionConnection> open({required List<String> keyterms}) async {
     openCount++;
     if (openError case final error?) throw error;
+    if (openGate case final gate?) return gate.future;
     if (failOpenAfterFirst && openCount > 1) throw StateError('offline');
     final connection = _FakeConnection();
     connections.add(connection);

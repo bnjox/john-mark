@@ -56,6 +56,7 @@ class SessionController extends ChangeNotifier {
   bool _disposed = false;
   bool _delayNoticeScheduled = false;
   bool _liveNoticeScheduled = false;
+  bool _captureFailureScheduled = false;
   _MatchWork? _matchWork;
 
   ListenerViewState get state => _state;
@@ -103,18 +104,19 @@ class SessionController extends ChangeNotifier {
     }
   });
 
-  Future<void> stop() => _serialize(_stop);
-
-  Future<void> onAppBackgrounded() => stop();
-
-  Future<void> _stop() async {
+  Future<void> stop() {
+    if (!_active && _state.phase == SessionPhase.stopped) {
+      return Future.value();
+    }
     ++_generation;
     _active = false;
     _cancelMatching();
-    await _releaseConnection();
     _clearTransientState();
     _setState(const ListenerViewState(phase: SessionPhase.stopped));
+    return _serialize(_releaseConnection);
   }
+
+  Future<void> onAppBackgrounded() => stop();
 
   Future<void> _connectAndCapture(int generation) async {
     final connection = await transcriptionClient.open(keyterms: _keyterms);
@@ -143,6 +145,9 @@ class SessionController extends ChangeNotifier {
     _captureStarted = true;
     _audioSubscription = audio.listen(
       (frame) => _onAudioFrame(frame, generation),
+      onError: (_) => _onCaptureEnded(generation),
+      onDone: () => _onCaptureEnded(generation),
+      cancelOnError: true,
     );
     unawaited(_pumpAudio(connection, generation));
     _reconnectAttempt = 0;
@@ -321,7 +326,19 @@ class SessionController extends ChangeNotifier {
     _startedAt = null;
     _delayNoticeScheduled = false;
     _liveNoticeScheduled = false;
+    _captureFailureScheduled = false;
     resetMatcher();
+  }
+
+  void _onCaptureEnded(int generation) {
+    if (_captureFailureScheduled || !_isCurrent(generation)) return;
+    _captureFailureScheduled = true;
+    unawaited(
+      _serialize(() async {
+        _captureFailureScheduled = false;
+        if (_isCurrent(generation)) await _failCapture(generation);
+      }),
+    );
   }
 
   void _onAudioFrame(Uint8List frame, int generation) {

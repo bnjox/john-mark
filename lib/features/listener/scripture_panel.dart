@@ -129,11 +129,7 @@ class _AlternativeTile extends StatelessWidget {
         minTileHeight: 56,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         title: Text(candidate.passage.label),
-        subtitle: Text(
-          candidate.passage.text,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
+        subtitle: Text(candidate.passage.text),
         trailing: Text(
           _confidenceText(candidate.band),
           style: Theme.of(context).textTheme.labelLarge
@@ -153,11 +149,12 @@ class _ConfidenceLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = stale
-        ? 'Stale · ${_confidenceText(band)}'
-        : _confidenceText(band);
+    final confidence = _confidenceText(band);
+    final text = stale ? 'Stale · $confidence' : 'Current · $confidence';
     return Semantics(
-      label: stale ? 'Result stale, confidence $text' : 'Confidence $text',
+      label: stale
+          ? 'Result stale, confidence $confidence'
+          : 'Result current, confidence $confidence',
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(

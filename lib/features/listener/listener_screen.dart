@@ -65,7 +65,10 @@ class _ListenerScreenState extends State<ListenerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) {
+    final permissionPromptMayBeVisible =
+        state == AppLifecycleState.inactive &&
+        widget.controller.state.phase == SessionPhase.connecting;
+    if (state != AppLifecycleState.resumed && !permissionPromptMayBeVisible) {
       unawaited(widget.controller.onAppBackgrounded());
     }
   }
@@ -376,7 +379,6 @@ class _TranscriptPanel extends StatelessWidget {
     ].where((part) => part.isNotEmpty).join(' ');
     return Semantics(
       container: true,
-      liveRegion: true,
       label: 'Live transcript',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

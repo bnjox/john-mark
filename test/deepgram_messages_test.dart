@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -121,6 +122,26 @@ void main() {
           (error) => error.failure,
           'failure',
           TranscriptionFailure.authentication,
+        ),
+      ),
+    );
+  });
+
+  test('bounds a stalled WebSocket handshake', () async {
+    final pending = Completer<WebSocket>();
+    final client = DeepgramClient(
+      apiKey: 'test-key',
+      connect: (_, _) => pending.future,
+      connectionTimeout: const Duration(milliseconds: 1),
+    );
+
+    await expectLater(
+      client.open(keyterms: const []),
+      throwsA(
+        isA<TranscriptionOpenException>().having(
+          (error) => error.failure,
+          'failure',
+          TranscriptionFailure.unavailable,
         ),
       ),
     );

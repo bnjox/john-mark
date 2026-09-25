@@ -108,6 +108,7 @@ void main() {
     await tester.pump();
     expect(find.text('John 3:16'), findsOneWidget);
     expect(find.text('Romans 5:8'), findsOneWidget);
+    expect(find.text('Current · High'), findsOneWidget);
     expect(find.textContaining('whoever believes'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -156,6 +157,40 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
 
+    expect(controller.backgroundCount, 1);
+  });
+
+  testWidgets('does not treat a permission prompt as backgrounding', (
+    tester,
+  ) async {
+    final controller = _FakeSessionController();
+    await tester.pumpWidget(
+      ScriptureListenerApp(
+        home: ListenerScreen(
+          controller: controller,
+          repository: _FakeBibleRepository(),
+          translations: const [Translation(id: 'nkjv', name: 'NKJV')],
+          serviceConfigured: true,
+          loadTranslationId: () async => 'nkjv',
+          saveTranslationId: (_) async {},
+          setWakelock: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    controller.emit(
+      const ListenerViewState(
+        phase: SessionPhase.connecting,
+        translation: Translation(id: 'nkjv', name: 'NKJV'),
+      ),
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(controller.backgroundCount, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
     expect(controller.backgroundCount, 1);
   });
 }

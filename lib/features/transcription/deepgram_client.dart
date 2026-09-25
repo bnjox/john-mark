@@ -15,10 +15,12 @@ class DeepgramClient implements TranscriptionClient {
   const DeepgramClient({
     this.apiKey = const String.fromEnvironment('DEEPGRAM_API_KEY'),
     this.connect = _connectWebSocket,
+    this.connectionTimeout = const Duration(seconds: 10),
   });
 
   final String apiKey;
   final DeepgramSocketConnector connect;
+  final Duration connectionTimeout;
 
   @override
   Future<TranscriptionConnection> open({required List<String> keyterms}) async {
@@ -31,8 +33,10 @@ class DeepgramClient implements TranscriptionClient {
     try {
       final socket = await connect(_uriFor(keyterms).toString(), {
         'Authorization': 'Token $apiKey',
-      });
+      }).timeout(connectionTimeout);
       return _DeepgramConnection(socket);
+    } on TimeoutException {
+      throw const TranscriptionOpenException(TranscriptionFailure.unavailable);
     } on WebSocketException catch (error) {
       throw TranscriptionOpenException(_classifyHandshakeFailure(error));
     }
