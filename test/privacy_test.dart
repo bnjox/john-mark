@@ -21,6 +21,7 @@ void main() {
         audioSource: audio,
         transcriptionClient: _PrivacyClient(connection),
         matchTranscript: (_, _) async => _match,
+        resetMatcher: () {},
       );
 
       try {
@@ -100,7 +101,7 @@ class _PrivacyConnection implements TranscriptionConnection {
   Stream<TranscriptionEvent> get events => providerEvents.stream;
 
   @override
-  void send(Uint8List audio) {}
+  Future<void> send(Uint8List audio) async {}
 
   @override
   Future<void> close() async {}

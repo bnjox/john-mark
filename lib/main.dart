@@ -17,6 +17,7 @@ Future<void> main() async {
     final controller = SessionController(
       audioSource: MicrophoneSource(),
       transcriptionClient: const DeepgramClient(),
+      resetMatcher: matchers.clear,
       matchTranscript: (translationId, text) => matchers
           .putIfAbsent(
             translationId,

@@ -27,6 +27,11 @@ class MatchStabilizer {
 
   MatchUpdate get current => _current;
 
+  void reset() {
+    _current = const MatchUpdate();
+    _clearPending();
+  }
+
   MatchUpdate? update(List<MatchCandidate> candidates) {
     final eligible =
         candidates

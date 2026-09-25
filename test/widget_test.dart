@@ -166,6 +166,7 @@ class _FakeSessionController extends SessionController {
         audioSource: _UnusedAudioSource(),
         transcriptionClient: _UnusedTranscriptionClient(),
         matchTranscript: (_, _) async => null,
+        resetMatcher: () {},
       );
 
   ListenerViewState _fakeState = const ListenerViewState();

@@ -11,12 +11,14 @@ typedef TranscriptMatcher = Future<MatchUpdate?> Function(
   String finalizedText,
 );
 typedef ReconnectDelay = Future<void> Function(Duration duration);
+typedef MatcherReset = void Function();
 
 class SessionController extends ChangeNotifier {
   SessionController({
     required this.audioSource,
     required this.transcriptionClient,
     required this.matchTranscript,
+    required this.resetMatcher,
     List<String> keyterms = const [],
     this.reconnectDelay = _defaultDelay,
   }) : _keyterms = List.unmodifiable(keyterms);
@@ -33,6 +35,7 @@ class SessionController extends ChangeNotifier {
   final AudioSource audioSource;
   final TranscriptionClient transcriptionClient;
   final TranscriptMatcher matchTranscript;
+  final MatcherReset resetMatcher;
   final ReconnectDelay reconnectDelay;
   final List<String> _keyterms;
   final BoundedAudioQueue _audioQueue = BoundedAudioQueue();
@@ -51,12 +54,15 @@ class SessionController extends ChangeNotifier {
   bool _active = false;
   bool _captureStarted = false;
   bool _disposed = false;
+  _MatchWork? _matchWork;
 
   ListenerViewState get state => _state;
 
   Future<void> start(Translation translation) => _serialize(() async {
     if (_active) return;
     final generation = ++_generation;
+    resetMatcher();
+    _matchWork = _MatchWork(generation);
     _active = true;
     _reconnectAttempt = 0;
     _setState(
@@ -81,6 +87,13 @@ class SessionController extends ChangeNotifier {
 
     try {
       await _connectAndCapture(generation);
+    } on TranscriptionOpenException catch (error) {
+      if (!_isCurrent(generation)) return;
+      if (error.isTerminal) {
+        await _failTerminal(generation, error.failure);
+      } else {
+        await _beginReconnect(generation);
+      }
     } catch (_) {
       if (_isCurrent(generation)) await _beginReconnect(generation);
     }
@@ -93,6 +106,7 @@ class SessionController extends ChangeNotifier {
   Future<void> _stop() async {
     ++_generation;
     _active = false;
+    _cancelMatching();
     await _releaseConnection();
     _clearTransientState();
     _setState(const ListenerViewState(phase: SessionPhase.stopped));
@@ -138,7 +152,7 @@ class SessionController extends ChangeNotifier {
         return;
       }
       try {
-        connection.send(frame);
+        await connection.send(frame);
       } catch (_) {
         unawaited(_serialize(() => _beginReconnect(generation)));
         return;
@@ -171,10 +185,7 @@ class SessionController extends ChangeNotifier {
             resultIsStale: false,
           ),
         );
-        final match = await matchTranscript(_state.translation!.id, finalized);
-        if (_isCurrent(generation) && match != null) {
-          _setState(_copyState(matches: match));
-        }
+        _scheduleMatch(generation, finalized);
       case TranscriptionEventType.disconnected:
         await _beginReconnect(generation);
       case TranscriptionEventType.error:
@@ -217,6 +228,14 @@ class SessionController extends ChangeNotifier {
         }
         try {
           await _connectAndCapture(generation);
+        } on TranscriptionOpenException catch (error) {
+          await _releaseConnection();
+          if (!_isCurrent(generation)) return;
+          if (error.isTerminal) {
+            await _failTerminal(generation, error.failure);
+          } else {
+            _scheduleReconnect(generation);
+          }
         } catch (_) {
           await _releaseConnection();
           if (_isCurrent(generation)) _scheduleReconnect(generation);
@@ -225,17 +244,22 @@ class SessionController extends ChangeNotifier {
     }());
   }
 
-  Future<void> _failTerminal(int generation) async {
+  Future<void> _failTerminal(
+    int generation, [
+    TranscriptionFailure? failure,
+  ]) async {
     await _releaseConnection();
     if (!_isCurrent(generation)) return;
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
     _active = false;
+    _cancelMatching();
+    resetMatcher();
     ++_generation;
     _setState(
       _copyState(
         phase: SessionPhase.serviceError,
-        message: 'Transcription service is unavailable.',
+        message: _terminalFailureMessage(failure),
       ),
     );
   }
@@ -263,6 +287,45 @@ class SessionController extends ChangeNotifier {
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
     _startedAt = null;
+    resetMatcher();
+  }
+
+  void _scheduleMatch(int generation, String finalizedText) {
+    final work = _matchWork;
+    if (work == null || work.generation != generation) return;
+    if (work.inFlight) {
+      work.pendingText = finalizedText;
+      return;
+    }
+    unawaited(_runMatch(work, finalizedText));
+  }
+
+  Future<void> _runMatch(_MatchWork work, String finalizedText) async {
+    work.inFlight = true;
+    try {
+      final translationId = _state.translation?.id;
+      if (translationId == null) return;
+      final match = await matchTranscript(translationId, finalizedText);
+      if (identical(_matchWork, work) &&
+          _isCurrent(work.generation) &&
+          match != null) {
+        _setState(_copyState(matches: match));
+      }
+    } catch (_) {
+      // A failed lookup must not terminate the session or block Stop.
+    } finally {
+      work.inFlight = false;
+      if (identical(_matchWork, work) && _isCurrent(work.generation)) {
+        final pending = work.pendingText;
+        work.pendingText = null;
+        if (pending != null) unawaited(_runMatch(work, pending));
+      }
+    }
+  }
+
+  void _cancelMatching() {
+    _matchWork?.pendingText = null;
+    _matchWork = null;
   }
 
   bool _rememberFinal(String? id) {
@@ -296,6 +359,17 @@ class SessionController extends ChangeNotifier {
         normalized.contains('CREDIT') ||
         normalized.contains('PAYMENT');
   }
+
+  static String _terminalFailureMessage(TranscriptionFailure? failure) =>
+      switch (failure) {
+        TranscriptionFailure.authentication =>
+          'Transcription authentication failed. Rebuild with a valid key.',
+        TranscriptionFailure.quota =>
+          'Transcription quota is unavailable. Check the service account.',
+        TranscriptionFailure.invalidRequest =>
+          'Transcription configuration is invalid for this build.',
+        _ => 'Transcription service is unavailable.',
+      };
 
   void _startElapsedTimer(int generation) {
     _elapsedTimer?.cancel();
@@ -345,6 +419,7 @@ class SessionController extends ChangeNotifier {
     _disposed = true;
     ++_generation;
     _active = false;
+    _cancelMatching();
     _elapsedTimer?.cancel();
     _audioQueue.clear();
     unawaited(_audioSubscription?.cancel());
@@ -356,3 +431,11 @@ class SessionController extends ChangeNotifier {
 }
 
 Future<void> _defaultDelay(Duration duration) => Future.delayed(duration);
+
+class _MatchWork {
+  _MatchWork(this.generation);
+
+  final int generation;
+  bool inFlight = false;
+  String? pendingText;
+}

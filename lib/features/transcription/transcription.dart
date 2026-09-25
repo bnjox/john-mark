@@ -2,6 +2,16 @@ import 'dart:typed_data';
 
 enum TranscriptionEventType { interim, finalized, disconnected, error }
 
+enum TranscriptionFailure { authentication, quota, invalidRequest, unavailable }
+
+class TranscriptionOpenException implements Exception {
+  const TranscriptionOpenException(this.failure);
+
+  final TranscriptionFailure failure;
+
+  bool get isTerminal => failure != TranscriptionFailure.unavailable;
+}
+
 class TranscriptionEvent {
   const TranscriptionEvent({
     required this.type,
@@ -26,7 +36,7 @@ abstract interface class AudioSource {
 
 abstract interface class TranscriptionConnection {
   Stream<TranscriptionEvent> get events;
-  void send(Uint8List audio);
+  Future<void> send(Uint8List audio);
   Future<void> close();
 }
 

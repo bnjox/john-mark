@@ -6,26 +6,36 @@ import 'dart:typed_data';
 import 'deepgram_messages.dart';
 import 'transcription.dart';
 
+typedef DeepgramSocketConnector = Future<WebSocket> Function(
+  String url,
+  Map<String, dynamic> headers,
+);
+
 class DeepgramClient implements TranscriptionClient {
   const DeepgramClient({
     this.apiKey = const String.fromEnvironment('DEEPGRAM_API_KEY'),
+    this.connect = _connectWebSocket,
   });
 
   final String apiKey;
+  final DeepgramSocketConnector connect;
 
   @override
   Future<TranscriptionConnection> open({required List<String> keyterms}) async {
     if (apiKey.isEmpty) {
-      throw StateError(
-        'DEEPGRAM_API_KEY is missing. Supply it with --dart-define.',
+      throw const TranscriptionOpenException(
+        TranscriptionFailure.invalidRequest,
       );
     }
 
-    final socket = await WebSocket.connect(
-      _uriFor(keyterms).toString(),
-      headers: {'Authorization': 'Token $apiKey'},
-    );
-    return _DeepgramConnection(socket);
+    try {
+      final socket = await connect(_uriFor(keyterms).toString(), {
+        'Authorization': 'Token $apiKey',
+      });
+      return _DeepgramConnection(socket);
+    } on WebSocketException catch (error) {
+      throw TranscriptionOpenException(_classifyHandshakeFailure(error));
+    }
   }
 
   Uri _uriFor(List<String> keyterms) {
@@ -59,6 +69,9 @@ class DeepgramClient implements TranscriptionClient {
   }
 }
 
+Future<WebSocket> _connectWebSocket(String url, Map<String, dynamic> headers) =>
+    WebSocket.connect(url, headers: headers);
+
 class _DeepgramConnection implements TranscriptionConnection {
   _DeepgramConnection(this._socket) {
     _subscription = _socket.listen(
@@ -80,9 +93,12 @@ class _DeepgramConnection implements TranscriptionConnection {
   Stream<TranscriptionEvent> get events => _events.stream;
 
   @override
-  void send(Uint8List audio) {
+  Future<void> send(Uint8List audio) async {
     if (_closed || audio.isEmpty) return;
-    _socket.add(audio);
+    // addStream completes when dart:io has accepted this frame. It is not a
+    // remote acknowledgement, but it prevents the controller from issuing
+    // more than one transport write at a time.
+    await _socket.addStream(Stream<Uint8List>.value(audio));
   }
 
   @override
@@ -125,4 +141,17 @@ class _DeepgramConnection implements TranscriptionConnection {
     );
     unawaited(_events.close());
   }
+}
+
+TranscriptionFailure _classifyHandshakeFailure(WebSocketException error) {
+  final message = error.message.toLowerCase();
+  final status = RegExp(r'(?:status(?: code)?[: ]+|http[/ ]\S+\s+)(\d{3})')
+      .firstMatch(message)
+      ?.group(1);
+  return switch (status) {
+    '401' || '403' => TranscriptionFailure.authentication,
+    '402' || '429' => TranscriptionFailure.quota,
+    '400' || '404' || '422' => TranscriptionFailure.invalidRequest,
+    _ => TranscriptionFailure.unavailable,
+  };
 }

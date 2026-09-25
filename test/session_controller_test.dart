@@ -54,6 +54,59 @@ void main() {
     expect(fixture.controller.state.phase, SessionPhase.stopped);
   });
 
+  test('slow matching does not block stop or apply a stale result', () async {
+    final matchResult = Completer<MatchUpdate?>();
+    final matchStarted = Completer<void>();
+    final fixture = _Fixture(
+      matcher: (_, _) {
+        if (!matchStarted.isCompleted) matchStarted.complete();
+        return matchResult.future;
+      },
+    );
+    await fixture.controller.start(_translation);
+    fixture.client.connections.single.eventsController.add(
+      const TranscriptionEvent(
+        type: TranscriptionEventType.finalized,
+        text: 'slow finalized text',
+        eventId: 'slow',
+      ),
+    );
+    await matchStarted.future;
+
+    await fixture.controller.stop();
+
+    expect(fixture.audio.stopCount, 1);
+    expect(fixture.client.connections.single.closeCount, 1);
+    expect(fixture.controller.state.phase, SessionPhase.stopped);
+    matchResult.complete(_match);
+    await _flush();
+    expect(fixture.controller.state.matches.featured, isNull);
+  });
+
+  test(
+    'awaits one send while retaining only the newest 64 queued frames',
+    () async {
+      final fixture = _Fixture();
+      await fixture.controller.start(_translation);
+      final connection = fixture.client.connections.single;
+      connection.sendGate = Completer<void>();
+
+      for (var value = 0; value <= 70; value++) {
+        fixture.audio.streams.single.add(Uint8List.fromList([value]));
+      }
+      await _flush();
+
+      expect(connection.sent.map((frame) => frame.single), [0]);
+      connection.sendGate!.complete();
+      await _flush(80);
+      expect(connection.sent, hasLength(65));
+      expect(connection.sent.skip(1).map((frame) => frame.single), [
+        for (var value = 7; value <= 70; value++) value,
+      ]);
+      await fixture.controller.stop();
+    },
+  );
+
   test('disconnect stops capture and never replays pre-loss audio', () async {
     final delays = <_PendingDelay>[];
     final fixture = _Fixture(
@@ -164,6 +217,32 @@ void main() {
     });
   }
 
+  test('terminal handshake failure does not retry', () async {
+    var delayCalls = 0;
+    final fixture = _Fixture(reconnectDelay: (_) async => delayCalls++);
+    fixture.client.openError = const TranscriptionOpenException(
+      TranscriptionFailure.authentication,
+    );
+
+    await fixture.controller.start(_translation);
+
+    expect(fixture.controller.state.phase, SessionPhase.serviceError);
+    expect(fixture.controller.state.message, contains('authentication'));
+    expect(fixture.client.openCount, 1);
+    expect(fixture.audio.startCount, 0);
+    expect(delayCalls, 0);
+  });
+
+  test('resets matcher state at start and stop boundaries', () async {
+    var resets = 0;
+    final fixture = _Fixture(resetMatcher: () => resets++);
+
+    await fixture.controller.start(_translation);
+    expect(resets, 1);
+    await fixture.controller.stop();
+    expect(resets, 2);
+  });
+
   test('repeated final IDs append and match once', () async {
     var matches = 0;
     final fixture = _Fixture(
@@ -266,13 +345,17 @@ const _match = MatchUpdate(
 );
 
 class _Fixture {
-  _Fixture({ReconnectDelay? reconnectDelay, TranscriptMatcher? matcher})
-    : audio = _FakeAudioSource(),
-      client = _FakeTranscriptionClient() {
+  _Fixture({
+    ReconnectDelay? reconnectDelay,
+    TranscriptMatcher? matcher,
+    MatcherReset? resetMatcher,
+  }) : audio = _FakeAudioSource(),
+       client = _FakeTranscriptionClient() {
     controller = SessionController(
       audioSource: audio,
       transcriptionClient: client,
       matchTranscript: matcher ?? (_, _) async => null,
+      resetMatcher: resetMatcher ?? () {},
       reconnectDelay: reconnectDelay ?? (_) async {},
     );
   }
@@ -306,11 +389,13 @@ class _FakeAudioSource implements AudioSource {
 class _FakeTranscriptionClient implements TranscriptionClient {
   int openCount = 0;
   bool failOpenAfterFirst = false;
+  Object? openError;
   final List<_FakeConnection> connections = [];
 
   @override
   Future<TranscriptionConnection> open({required List<String> keyterms}) async {
     openCount++;
+    if (openError case final error?) throw error;
     if (failOpenAfterFirst && openCount > 1) throw StateError('offline');
     final connection = _FakeConnection();
     connections.add(connection);
@@ -322,12 +407,16 @@ class _FakeConnection implements TranscriptionConnection {
   final eventsController = StreamController<TranscriptionEvent>.broadcast();
   final List<Uint8List> sent = [];
   int closeCount = 0;
+  Completer<void>? sendGate;
 
   @override
   Stream<TranscriptionEvent> get events => eventsController.stream;
 
   @override
-  void send(Uint8List audio) => sent.add(Uint8List.fromList(audio));
+  Future<void> send(Uint8List audio) async {
+    sent.add(Uint8List.fromList(audio));
+    await sendGate?.future;
+  }
 
   @override
   Future<void> close() async => closeCount++;
@@ -340,8 +429,8 @@ class _PendingDelay {
   final Completer<void> completer = Completer<void>();
 }
 
-Future<void> _flush() async {
-  for (var i = 0; i < 8; i++) {
+Future<void> _flush([int turns = 8]) async {
+  for (var i = 0; i < turns; i++) {
     await Future<void>.delayed(Duration.zero);
   }
 }

@@ -181,6 +181,62 @@ void main() {
     );
   });
 
+  test('rejects unknown FSB keys with their JSON location', () async {
+    final source = await writeJson('unknown-key.fsb', {
+      ..._singleVerseBible('Unknown Key'),
+      'unexpected': 'must not be ignored',
+    });
+
+    await expectLater(
+      BibleBuilder().build([source], '${temporaryDirectory.path}/bad.db'),
+      throwsA(
+        isA<FormatException>()
+            .having((error) => error.message, 'message', contains(source.path))
+            .having(
+              (error) => error.message,
+              'message',
+              contains(r'$.unexpected'),
+            ),
+      ),
+    );
+  });
+
+  test('rejects unknown XML children and attributes with locations', () async {
+    final cases = <(String, String, String)>[
+      (
+        'unknown-child.xml',
+        '<XMLBIBLE biblename="Test"><INFORMATION />'
+            '<BIBLEBOOK bnumber="43" bname="John"><CHAPTER cnumber="1">'
+            '<VERS vnumber="1">Text</VERS></CHAPTER></BIBLEBOOK></XMLBIBLE>',
+        '/XMLBIBLE/INFORMATION',
+      ),
+      (
+        'unknown-attribute.xml',
+        '<XMLBIBLE biblename="Test"><BIBLEBOOK bnumber="43" bname="John">'
+            '<CHAPTER cnumber="1"><VERS vnumber="1" style="ignored">'
+            'Text</VERS></CHAPTER></BIBLEBOOK></XMLBIBLE>',
+        '/XMLBIBLE/BIBLEBOOK[1]/CHAPTER[1]/VERS[1]/@style',
+      ),
+    ];
+
+    for (final (name, contents, location) in cases) {
+      final source = File('${temporaryDirectory.path}/$name');
+      await source.writeAsString(contents);
+      await expectLater(
+        BibleBuilder().build([source], '${temporaryDirectory.path}/$name.db'),
+        throwsA(
+          isA<FormatException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains(source.path),
+              )
+              .having((error) => error.message, 'message', contains(location)),
+        ),
+      );
+    }
+  });
+
   test('rejects duplicate translation IDs after slugging', () async {
     final first = await writeJson('first.fsb', _singleVerseBible('Same Name'));
     final second = await writeJson(

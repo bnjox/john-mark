@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:guide/features/transcription/deepgram_messages.dart';
+import 'package:guide/features/transcription/deepgram_client.dart';
 import 'package:guide/features/transcription/transcription.dart';
 
 void main() {
@@ -105,7 +107,30 @@ void main() {
       expect(decoder.decode(payload), isNull);
     });
   });
+
+  test('classifies terminal WebSocket handshake failures', () async {
+    const client = DeepgramClient(
+      apiKey: 'test-key',
+      connect: _rejectAuthentication,
+    );
+
+    await expectLater(
+      client.open(keyterms: const []),
+      throwsA(
+        isA<TranscriptionOpenException>().having(
+          (error) => error.failure,
+          'failure',
+          TranscriptionFailure.authentication,
+        ),
+      ),
+    );
+  });
 }
+
+Future<WebSocket> _rejectAuthentication(String _, Map<String, dynamic> _) =>
+    throw const WebSocketException(
+      'Connection was not upgraded, HTTP status code: 401',
+    );
 
 String _result(
   String transcript, {

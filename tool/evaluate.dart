@@ -15,7 +15,10 @@ Future<void> main(List<String> arguments) async {
     final options = _parseArguments(arguments);
     final repository = _CliBibleRepository.open(options.database);
     try {
-      final metrics = await _evaluate(repository, File(options.fixtures));
+      final metrics = await evaluateFixtures(
+        repository,
+        File(options.fixtures),
+      );
       stdout
         ..writeln('total: ${metrics.total}')
         ..writeln('top-one: ${metrics.topOne}')
@@ -68,7 +71,10 @@ _Options _parseArguments(List<String> arguments) {
   return _Options(database: database, fixtures: fixtures);
 }
 
-Future<_Metrics> _evaluate(BibleRepository repository, File fixtures) async {
+Future<EvaluationMetrics> evaluateFixtures(
+  BibleRepository repository,
+  File fixtures,
+) async {
   final translationIds = (await repository.translations())
       .map((translation) => translation.id)
       .toSet();
@@ -100,16 +106,16 @@ Future<_Metrics> _evaluate(BibleRepository repository, File fixtures) async {
     );
 
     final stopwatch = Stopwatch()..start();
-    var update = await matcher.match(fixture.transcript);
-    if (update?.featured == null) {
-      // Possible-confidence matches require confirmation in two windows.
-      update = await matcher.match(fixture.transcript) ?? matcher.current;
+    MatchUpdate? update;
+    for (final window in fixture.windows) {
+      update = await matcher.match(window) ?? update;
     }
     stopwatch.stop();
+    update ??= matcher.current;
 
     final candidates = <MatchCandidate>[
-      ?update?.featured,
-      ...?update?.alternatives,
+      ?update.featured,
+      ...update.alternatives,
     ];
     total++;
     elapsedMicroseconds.add(stopwatch.elapsedMicroseconds);
@@ -139,7 +145,7 @@ Future<_Metrics> _evaluate(BibleRepository repository, File fixtures) async {
   final medianMicroseconds = elapsedMicroseconds.length.isOdd
       ? elapsedMicroseconds[middle].toDouble()
       : (elapsedMicroseconds[middle - 1] + elapsedMicroseconds[middle]) / 2;
-  return _Metrics(
+  return EvaluationMetrics(
     total: total,
     topOne: topOne,
     topFour: topFour,
@@ -168,7 +174,7 @@ class _Options {
 class _Fixture {
   const _Fixture({
     required this.translation,
-    required this.transcript,
+    required this.windows,
     required this.expected,
   });
 
@@ -184,12 +190,42 @@ class _Fixture {
     }
     final translation = decoded['translation'];
     final transcript = decoded['transcript'];
+    final rawWindows = decoded['windows'];
     final expected = decoded['expected'];
     if (translation is! String || translation.trim().isEmpty) {
       throw _FixtureException(lineNumber, 'translation must be a string.');
     }
-    if (transcript is! String || transcript.trim().isEmpty) {
-      throw _FixtureException(lineNumber, 'transcript must be a string.');
+    if (transcript != null && rawWindows != null) {
+      throw _FixtureException(
+        lineNumber,
+        'provide either transcript or windows, not both.',
+      );
+    }
+    final windows = <String>[];
+    if (transcript != null) {
+      if (transcript is! String || transcript.trim().isEmpty) {
+        throw _FixtureException(
+          lineNumber,
+          'transcript must be a non-empty string.',
+        );
+      }
+      windows.add(transcript);
+    } else if (rawWindows is List && rawWindows.isNotEmpty) {
+      for (var index = 0; index < rawWindows.length; index++) {
+        final window = rawWindows[index];
+        if (window is! String || window.trim().isEmpty) {
+          throw _FixtureException(
+            lineNumber,
+            'windows[$index] must be a non-empty string.',
+          );
+        }
+        windows.add(window);
+      }
+    } else {
+      throw _FixtureException(
+        lineNumber,
+        'transcript or a non-empty windows array is required.',
+      );
     }
     if (expected != null && expected is! String) {
       throw _FixtureException(lineNumber, 'expected must be a string or null.');
@@ -199,18 +235,18 @@ class _Fixture {
     }
     return _Fixture(
       translation: translation,
-      transcript: transcript,
+      windows: List.unmodifiable(windows),
       expected: expected as String?,
     );
   }
 
   final String translation;
-  final String transcript;
+  final List<String> windows;
   final String? expected;
 }
 
-class _Metrics {
-  const _Metrics({
+class EvaluationMetrics {
+  const EvaluationMetrics({
     required this.total,
     required this.topOne,
     required this.topFour,

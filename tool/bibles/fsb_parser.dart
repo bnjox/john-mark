@@ -13,6 +13,7 @@ class FsbParser {
     }
 
     final root = _map(decoded, file.path, r'$');
+    _allowKeys(root, const {'name', 'books'}, file.path, r'$');
     final name = _string(root['name'], file.path, r'$.name');
     final rawBooks = _list(root['books'], file.path, r'$.books');
     if (rawBooks.isEmpty) {
@@ -26,6 +27,12 @@ class FsbParser {
           r'$.books['
           '$bookIndex]';
       final rawBook = _map(rawBooks[bookIndex], file.path, location);
+      _allowKeys(
+        rawBook,
+        const {'number', 'name', 'chapters'},
+        file.path,
+        location,
+      );
       final number = _positiveInt(
         rawBook['number'],
         file.path,
@@ -57,6 +64,12 @@ class FsbParser {
         final chapterLocation = '$location.chapters[$chapterIndex]';
         final rawChapter = _map(
           rawChapters[chapterIndex],
+          file.path,
+          chapterLocation,
+        );
+        _allowKeys(
+          rawChapter,
+          const {'number', 'verses'},
           file.path,
           chapterLocation,
         );
@@ -102,6 +115,12 @@ class FsbParser {
     for (var verseIndex = 0; verseIndex < rawVerses.length; verseIndex++) {
       final location = '$chapterLocation.verses[$verseIndex]';
       final rawVerse = _map(rawVerses[verseIndex], filePath, location);
+      _allowKeys(
+        rawVerse,
+        const {'number', 'endNumber', 'text'},
+        filePath,
+        location,
+      );
       final number = _positiveInt(
         rawVerse['number'],
         filePath,
@@ -125,6 +144,19 @@ class FsbParser {
       );
     }
     return verses;
+  }
+}
+
+void _allowKeys(
+  Map<String, Object?> value,
+  Set<String> allowed,
+  String file,
+  String location,
+) {
+  for (final key in value.keys) {
+    if (!allowed.contains(key)) {
+      _fail(file, '$location.$key', 'is not supported');
+    }
   }
 }
 

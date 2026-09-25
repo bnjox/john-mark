@@ -43,9 +43,24 @@ flutter build apk --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 flutter build ios --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 ```
 
-The evaluator reads one JSON object per line with `translation`, `transcript`,
-and nullable `expected` fields. It prints aggregate metrics only and never
+The evaluator reads one JSON object per line with `translation`, nullable
+`expected`, and either one `transcript` matcher window or explicit ordered
+`windows`:
+
+```json
+{"translation":"nkjv","transcript":"John chapter three verse sixteen","expected":"John 3:16"}
+{"translation":"nkjv","windows":["first rolling window","next rolling window"],"expected":"John 3:16"}
+```
+
+A `transcript` is evaluated exactly once. Each `windows` entry is passed to the
+matcher once, in order, and should contain the rolling text exactly as the live
+session would present it. The evaluator prints aggregate metrics only and never
 prints transcript or verse text.
+
+Audio delivery awaits one `dart:io` WebSocket `addStream` call per frame. This
+bounds the controller to one in-flight transport write plus its 64-frame queue;
+completion means the local transport accepted the frame, not that Deepgram
+acknowledged it over the network.
 
 ## Operations
 

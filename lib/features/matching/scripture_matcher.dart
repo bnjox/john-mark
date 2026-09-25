@@ -25,6 +25,8 @@ class ScriptureMatcher {
 
   MatchUpdate get current => _stabilizer.current;
 
+  void reset() => _stabilizer.reset();
+
   Future<MatchUpdate?> match(String finalizedText) async {
     final reference = await _referenceParser.parse(
       finalizedText,
@@ -33,6 +35,29 @@ class ScriptureMatcher {
     if (reference != null) return _stabilizer.update([reference]);
 
     final quotations = await _quoteMatcher.match(finalizedText, translationId);
+    if (_hasMateriallyTiedNonOverlappingCandidates(quotations)) {
+      return _stabilizer.update(const []);
+    }
     return _stabilizer.update(quotations);
   }
+
+  bool _hasMateriallyTiedNonOverlappingCandidates(
+    List<MatchCandidate> candidates,
+  ) {
+    if (candidates.length < 2) return false;
+    final best = candidates.first;
+    for (final candidate in candidates.skip(1)) {
+      if (best.score - candidate.score > config.replacementMargin) break;
+      if (!_overlaps(best.passage.reference, candidate.passage.reference)) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
+
+bool _overlaps(ScriptureReference left, ScriptureReference right) =>
+    left.book == right.book &&
+    left.chapter == right.chapter &&
+    left.startVerse <= right.endVerse &&
+    right.startVerse <= left.endVerse;

@@ -14,9 +14,11 @@ class ZefaniaXmlParser {
     }
 
     final root = document.rootElement;
-    if (root.name.local != 'XMLBIBLE') {
+    if (root.name.prefix != null || root.name.local != 'XMLBIBLE') {
       _fail(file.path, '/${root.name.local}', 'unsupported root element');
     }
+    _allowAttributes(root, const {'biblename'}, file.path, '/XMLBIBLE');
+    _allowChildElements(root, const {'BIBLEBOOK'}, file.path, '/XMLBIBLE');
     final name = _attribute(root, 'biblename', file.path, '/XMLBIBLE');
     final bookElements = root.findElements('BIBLEBOOK').toList();
     if (bookElements.isEmpty) {
@@ -28,6 +30,13 @@ class ZefaniaXmlParser {
     for (var bookIndex = 0; bookIndex < bookElements.length; bookIndex++) {
       final element = bookElements[bookIndex];
       final location = '/XMLBIBLE/BIBLEBOOK[${bookIndex + 1}]';
+      _allowAttributes(
+        element,
+        const {'bnumber', 'bname'},
+        file.path,
+        location,
+      );
+      _allowChildElements(element, const {'CHAPTER'}, file.path, location);
       final number = _positiveAttribute(
         element,
         'bnumber',
@@ -54,6 +63,18 @@ class ZefaniaXmlParser {
       ) {
         final chapterElement = chapterElements[chapterIndex];
         final chapterLocation = '$location/CHAPTER[${chapterIndex + 1}]';
+        _allowAttributes(
+          chapterElement,
+          const {'cnumber'},
+          file.path,
+          chapterLocation,
+        );
+        _allowChildElements(
+          chapterElement,
+          const {'VERS'},
+          file.path,
+          chapterLocation,
+        );
         final chapterNumber = _positiveAttribute(
           chapterElement,
           'cnumber',
@@ -80,6 +101,13 @@ class ZefaniaXmlParser {
         ) {
           final verseElement = verseElements[verseIndex];
           final verseLocation = '$chapterLocation/VERS[${verseIndex + 1}]';
+          _allowAttributes(
+            verseElement,
+            const {'vnumber', 'endNumber'},
+            file.path,
+            verseLocation,
+          );
+          _allowChildElements(verseElement, const {}, file.path, verseLocation);
           final number = _positiveAttribute(
             verseElement,
             'vnumber',
@@ -131,6 +159,36 @@ class ZefaniaXmlParser {
       );
     }
     return SourceBible(sourcePath: file.path, name: name, books: books);
+  }
+}
+
+void _allowAttributes(
+  XmlElement element,
+  Set<String> allowed,
+  String file,
+  String location,
+) {
+  for (final attribute in element.attributes) {
+    final isNamespace =
+        attribute.name.prefix == 'xmlns' || attribute.name.local == 'xmlns';
+    if (!isNamespace &&
+        (attribute.name.prefix != null ||
+            !allowed.contains(attribute.name.local))) {
+      _fail(file, '$location/@${attribute.name.local}', 'is not supported');
+    }
+  }
+}
+
+void _allowChildElements(
+  XmlElement element,
+  Set<String> allowed,
+  String file,
+  String location,
+) {
+  for (final child in element.childElements) {
+    if (child.name.prefix != null || !allowed.contains(child.name.local)) {
+      _fail(file, '$location/${child.name.local}', 'is not supported');
+    }
   }
 }
 
