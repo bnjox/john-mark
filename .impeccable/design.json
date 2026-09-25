@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T03:57:24Z",
+  "title": "Design System: Scripture Listener",
+  "extensions": {
+    "colorMeta": {
+      "warm-amber-seed": {
+        "role": "primary",
+        "displayName": "Warm Amber Seed",
+        "canonical": "#D6A84B",
+        "purpose": "Generates the dark Material 3 primary roles used for action, live state, and confidence."
+      },
+      "console-surface": {
+        "role": "neutral",
+        "displayName": "Console Surface",
+        "canonical": "#101112",
+        "purpose": "Fixed scaffold and app-bar ground for the low-glare operator console."
+      }
+    },
+    "typographyMeta": {
+      "passage-reference": {
+        "displayName": "Passage Reference",
+        "purpose": "Bold featured reference and passage-sheet heading using Material headlineSmall."
+      },
+      "scripture-body": {
+        "displayName": "Scripture Body",
+        "purpose": "Primary verse reading role using Material titleLarge with relaxed line height."
+      },
+      "section-label": {
+        "displayName": "Section Label",
+        "purpose": "Uppercase operational headings with bold weight and 1.1sp tracking."
+      },
+      "action-label": {
+        "displayName": "Action Label",
+        "purpose": "Bold Material button text without the section heading's uppercase treatment or tracking override."
+      },
+      "supporting-body": {
+        "displayName": "Supporting Body",
+        "purpose": "Privacy, hints, and secondary explanation using semantic variant color."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "wide-listening-workspace",
+        "value": "600dp",
+        "purpose": "Switches the active view from one scripture-first column to a 3:2 scripture/transcript row."
+      }
+    ],
+    "layout": {
+      "readyMaxWidth": "640dp",
+      "listeningMaxWidth": "1000dp",
+      "compactHorizontalInset": "20dp",
+      "wideColumnGap": "24dp",
+      "wideColumnRatio": "3:2"
+    },
+    "semanticColorRoles": {
+      "primary": "Live status, confidence text, and primary filled action.",
+      "surfaceContainer": "Transcript and empty-result panels.",
+      "surfaceContainerHigh": "Featured interactive passage.",
+      "onSurface": "Primary reading content.",
+      "onSurfaceVariant": "Labels, hints, empty states, privacy copy, and inactive status.",
+      "outlineVariant": "Passage-sheet handle and subtle boundaries.",
+      "error": "Configuration, availability, and session errors."
+    },
+    "accessibility": {
+      "minimumTouchTarget": "48dp",
+      "layoutBehavior": "Scrollable, wrapping content with safe-area insets and no fixed-height reading regions.",
+      "semantics": "Named containers for ready state, session status, detected scripture, live transcript, privacy notice, and passage context.",
+      "largeText": "Status and confidence/reference rows wrap; compact and wide layouts are selected from available width."
+    },
+    "lifecycle": {
+      "foregroundOnly": true,
+      "backgroundBehavior": "Stop the active session whenever app lifecycle state is not resumed.",
+      "wakelock": "Enabled only during active phases and disabled on stop or disposal.",
+      "ephemeralData": "Transcript and passage history are cleared when listening stops."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Listening Action",
+      "kind": "button",
+      "refersTo": "primary-action",
+      "description": "Material 3 filled icon button, 56dp high, used only to start listening."
+    },
+    {
+      "name": "Stop Listening Action",
+      "kind": "button",
+      "description": "Material 3 outlined icon button matching the primary action dimensions."
+    },
+    {
+      "name": "Featured Passage",
+      "kind": "card",
+      "refersTo": "featured-passage",
+      "description": "Interactive high-tonal scripture surface with reference, current/stale confidence, verse text, and context affordance."
+    },
+    {
+      "name": "Transcript Panel",
+      "kind": "card",
+      "refersTo": "transcript-panel",
+      "description": "Supporting 12dp tonal panel with 16dp padding and bodyLarge text at 1.5 line height."
+    },
+    {
+      "name": "Confidence and Freshness Label",
+      "kind": "custom",
+      "description": "Semantic-primary label using Current or Stale plus High or Possible; never a numeric score."
+    },
+    {
+      "name": "Passage Context Sheet",
+      "kind": "custom",
+      "description": "Safe-area-aware native modal sheet with a 40x4dp handle, loading state, scripture content, and 48dp Close action."
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Operator Console",
+    "overview": "Scripture Listener is an adaptive native Flutter interface for a dim, long-running production environment. Its visual language is restrained and operational: a near-black foundation, semantic Material 3 surfaces, one warm amber seed for action and live-state emphasis, and no decorative religious imagery. Native controls and platform behavior carry more authority than custom styling.\n\nThe hierarchy is scripture-first. The current detected reference and passage are the strongest reading moment; alternatives follow, while transcript and privacy copy remain clearly supporting information. Confidence is expressed in plain language instead of scores, and every featured result explicitly says whether it is current or stale.",
+    "keyCharacteristics": [
+      "Adaptive native Flutter with Material 3 controls and safe-area-aware layouts.",
+      "Restrained dark tonal surfaces with warm amber reserved for action, live state, and confidence.",
+      "Scripture-first reading hierarchy with supporting transcript content kept visually quieter.",
+      "Compact single-column and wide two-column compositions driven by available width.",
+      "Accessible wrapping, semantic regions, large touch targets, and foreground-only lifecycle behavior."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic Color Rule",
+        "body": "Components consume Material 3 color roles; only the seed and base surface are fixed raw colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Amber Restraint Rule",
+        "body": "Amber communicates action, active session state, or match confidence. It is not general decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Role-First Type Rule",
+        "body": "Choose a Material text role before applying the few implemented overrides; do not introduce screen-specific font families or arbitrary sizes.",
+        "section": "typography"
+      },
+      {
+        "name": "The Scripture-First Rule",
+        "body": "Responsive rearrangement may move supporting content beside scripture, never ahead of it.",
+        "section": "layout"
+      },
+      {
+        "name": "The Tonal-Only Rule",
+        "body": "Do not add decorative shadows or glass effects; distinguish hierarchy with semantic surface levels.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep scripture visually dominant over transcript, privacy, and operational metadata.",
+      "Do use Material 3 semantic color and type roles so contrast and native behavior remain coherent.",
+      "Do preserve wrapping, scrolling, semantic containers, descriptive control labels, and 48dp minimum interactive targets.",
+      "Do stop listening when the app leaves the foreground, disable the wakelock, and present any retained result as stale when the state says it is stale.",
+      "Do keep live transcript and passage history ephemeral and explain that behavior in the ready state."
+    ],
+    "donts": [
+      "Don't add decorative religious motifs, dashboard chrome, raw confidence scores, or extra accent colors.",
+      "Don't place transcript before scripture or promote more than three alternatives.",
+      "Don't freeze phone layouts onto wide screens; switch to the implemented 3:2 workspace at 600dp.",
+      "Don't hard-code platform fonts, bypass safe areas, clip large text, or replace native controls without a platform-specific need.",
+      "Don't imply background listening or preserve sermon/session history after listening stops."
+    ]
+  }
+}

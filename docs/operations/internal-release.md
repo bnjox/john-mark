@@ -17,10 +17,17 @@ fixtures, the generated database, and credentials must remain outside Git.
 Confirm the working tree and ignored private files before building:
 
 ```bash
+set -a
+. ./.env
+set +a
 git status --short --ignored
 flutter --version
 test -n "$DEEPGRAM_API_KEY"
 ```
+
+Use a shell-compatible `.env` entry such as
+`DEEPGRAM_API_KEY='your-restricted-key'`. The app does not load this file at
+runtime; the release commands below inject the loaded value at compile time.
 
 ## Build and verify
 

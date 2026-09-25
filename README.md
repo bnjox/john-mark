@@ -31,11 +31,49 @@ ignored by Git. A key supplied with `--dart-define` remains extractable from a
 compiled mobile binary; internal distribution accepts that risk and rotation
 requires a newly built and redistributed app.
 
-## Build and evaluate
+## Local setup
+
+Create `.env` at the repository root. It is ignored by Git:
+
+```dotenv
+DEEPGRAM_API_KEY='your-restricted-deepgram-key'
+```
+
+Load it into the current shell without printing the value:
+
+```bash
+set -a
+. ./.env
+set +a
+test -n "$DEEPGRAM_API_KEY"
+```
+
+The app does not read `.env` at runtime. Every `flutter run` or `flutter build`
+command must inject the loaded value with
+`--dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"`.
+
+Install dependencies and generate the private Bible asset:
 
 ```bash
 flutter pub get
 dart run tool/build_bibles.dart private/bibles/NKJV.fsb private/bibles/KJV.xml --output assets/bibles.db
+```
+
+List connected targets and run locally:
+
+```bash
+flutter devices
+flutter run -d <device-id> --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
+```
+
+Android requires the Android SDK and a complete JDK with `javac`. iPhone runs
+and builds require macOS, Xcode, and configured signing.
+
+## Evaluate and build
+
+After loading `.env` as above:
+
+```bash
 dart run tool/evaluate.dart --database assets/bibles.db --fixtures private/evaluation/sermons.ndjson
 flutter test
 flutter analyze
