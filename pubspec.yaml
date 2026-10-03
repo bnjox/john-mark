@@ -31,6 +31,7 @@ dependencies:
   crypto: 3.0.7
   flutter:
     sdk: flutter
+  flutter_onnxruntime: 1.8.4
   path: 1.9.1
   path_provider: 2.1.6
   record: 7.1.1
@@ -63,6 +64,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/semantic/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
