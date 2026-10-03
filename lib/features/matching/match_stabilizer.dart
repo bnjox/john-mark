@@ -8,17 +8,24 @@ class MatchConfig {
     this.possibleThreshold = 0.68,
     this.replacementMargin = defaultReplacementMargin,
     this.confirmationWindows = 2,
+    this.semanticThreshold = 0.82,
+    this.semanticWinnerMargin = 0.06,
+    this.semanticConfirmationWindows = 2,
   });
 
   final double strongThreshold;
   final double possibleThreshold;
   final double replacementMargin;
   final int confirmationWindows;
+  final double semanticThreshold;
+  final double semanticWinnerMargin;
+  final int semanticConfirmationWindows;
 }
 
 class MatchStabilizer {
   MatchStabilizer(this.config)
     : assert(config.confirmationWindows > 0),
+      assert(config.semanticConfirmationWindows > 0),
       assert(config.possibleThreshold <= config.strongThreshold);
 
   final MatchConfig config;

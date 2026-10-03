@@ -12,7 +12,7 @@ const _headerLength = 20;
 const _rowHeaderLength = 10;
 const _maximumResults = 8;
 
-class SemanticIndex {
+class SemanticIndex implements SemanticVectorIndex {
   SemanticIndex._({
     required this.metadata,
     required this.dimensions,
@@ -117,6 +117,7 @@ class SemanticIndex {
   final int dimensions;
   final List<_IndexRow> _rows;
 
+  @override
   Future<List<SemanticHit>> search(List<double> query, {int limit = 8}) {
     if (query.length != dimensions) {
       throw ArgumentError.value(

@@ -37,3 +37,7 @@ abstract interface class SemanticRetriever {
 
   Future<List<SemanticHit>> search(String text, {int limit = 8});
 }
+
+abstract interface class SemanticVectorIndex {
+  Future<List<SemanticHit>> search(List<double> query, {int limit = 8});
+}
