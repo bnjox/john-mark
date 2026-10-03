@@ -7,8 +7,9 @@ fixtures, the generated database, and credentials must remain outside Git.
 ## Prerequisites
 
 - Flutter 3.47.5 with Dart 3.13.4
+- `uv` with Python 3.12 or newer
 - Android SDK and a configured Android release signing key
-- For iOS: macOS, current Xcode, an Apple Developer team, and a registered
+- For iOS 16+: macOS, current Xcode, an Apple Developer team, and a registered
   bundle identifier/provisioning profile
 - Bible source files the organization is legally entitled to copy and
   distribute in this app
@@ -32,10 +33,14 @@ runtime; the release commands below inject the loaded value at compile time.
 ## Build and verify
 
 Use these exact commands, replacing the example Bible filenames only when the
-licensed source filenames differ:
+licensed source filenames differ. Semantic tooling tests, model download,
+Bible generation, and index generation are owner-run release steps:
 
 ```bash
+uv run tool/test_semantic_tools.py
 dart run tool/build_bibles.dart private/bibles/NKJV.fsb private/bibles/KJV.xml --output assets/bibles.db
+uv run tool/fetch_semantic_model.py
+uv run tool/build_semantic_index.py --database assets/bibles.db --model private/models/bge-base-en-v1.5 --output assets/semantic/scripture_embeddings.bin
 dart run tool/evaluate.dart --database assets/bibles.db --fixtures private/evaluation/sermons.ndjson
 dart format --output=none --set-exit-if-changed tool lib test
 flutter test
@@ -44,9 +49,18 @@ flutter build apk --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 flutter build ios --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 ```
 
-The evaluator prints six aggregate values only. Store only those aggregate
-values in the acceptance record; never copy transcript or verse text into
-release notes, logs, tickets, or CI output.
+The CLI evaluator is translation-neutral but lexical-only; the mobile ONNX
+runtime does not run through plain `dart run`. It prints six aggregate values
+only. Store only those aggregate values in the acceptance record; never copy
+transcript or verse text into release notes, logs, tickets, or CI output.
+Measure semantic quality and runtime behavior in profile mode on representative
+Android and iPhone devices.
+
+Confirm `private/models/`, `assets/bibles.db`, and generated files under
+`assets/semantic/` remain ignored and unstaged. The model fetch verifies a
+pinned BGE-base-en-v1.5 revision and stages its upstream README with the runtime
+assets. Review the BGE model card's MIT attribution and distribution terms for
+the exact release; do not remove the bundled attribution.
 
 The Android APK is written to `build/app/outputs/flutter-apk/app-release.apk`.
 The unsigned/locally signed iOS application is under `build/ios/iphoneos/`;
@@ -94,6 +108,11 @@ proof of permission. Confirm allowed territory, audience, attribution, and
 distribution method with the rights holder before building. Record the legal
 approval outside this repository. Never publish `assets/bibles.db` or private
 source files as a source-control or CI artifact.
+
+The app searches all bundled translations but displays NKJV when available, or
+a deterministic named fallback otherwise. Missing, stale, or invalid semantic
+assets leave explicit-reference and quotation matching operational; that safe
+degradation must still be verified on the signed release artifact.
 
 ## Release decision
 

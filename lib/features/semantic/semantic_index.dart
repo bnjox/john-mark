@@ -11,6 +11,7 @@ const _formatVersion = 1;
 const _headerLength = 20;
 const _rowHeaderLength = 10;
 const _maximumResults = 8;
+const _quantization = 'symmetric-int8-per-row';
 
 class SemanticIndex implements SemanticVectorIndex {
   SemanticIndex._({
@@ -63,6 +64,9 @@ class SemanticIndex implements SemanticVectorIndex {
     }
     if (metadata.modelRevision != expectedModelRevision) {
       throw const FormatException('Semantic index revision does not match');
+    }
+    if (metadata.quantization != _quantization) {
+      throw const FormatException('Semantic index quantization does not match');
     }
     if (metadata.bibleFingerprint != expectedBibleFingerprint) {
       throw const FormatException(

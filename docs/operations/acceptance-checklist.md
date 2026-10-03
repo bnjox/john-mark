@@ -19,7 +19,10 @@ key, Bible source, or generated database content.
 - [ ] `flutter test` passes.
 - [ ] `flutter analyze` passes.
 - [ ] Private Bible files, fixtures, `assets/bibles.db`, credentials, and
-      signing material are absent from the Git diff and release logs.
+      signing material are absent from the Git diff and release logs; generated
+      model and semantic-index assets are ignored and unstaged.
+- [ ] The pinned semantic model and generated index validate against the release
+      Bible fingerprint, model revision, dimensions, and translation set.
 - [ ] Evaluation used representative private fixtures and the release Bible
       database.
 
@@ -32,8 +35,8 @@ Aggregate metrics only:
 - No-result: __________
 - Median-time: __________ ms
 - Agreed false-positive limit: __________
-- [ ] The strictest tested matcher thresholds meeting that limit were selected
-      while preserving representative expected matches.
+- [ ] Lexical CLI and mobile semantic profile results both meet the agreed
+      false-positive ceiling while preserving representative expected matches.
 
 ## Android and iPhone behavior
 
@@ -51,11 +54,21 @@ platform.
       queued audio.
 - [ ] A deliberately invalid key reaches a terminal, non-retrying service
       error without exposing the key.
-- [ ] Each selected translation is searched in isolation.
+- [ ] Representative wording unique to each bundled translation contributes
+      evidence to the same canonical scripture reference.
+- [ ] Results and surrounding context display NKJV when bundled.
+- [ ] With NKJV absent, the deterministic fallback translation is named and is
+      used consistently for results and context.
 - [ ] Representative explicit references resolve correctly.
 - [ ] Representative close quotations produce useful top-one/top-four results.
+- [ ] Representative differently worded quotations/paraphrases resolve only
+      when semantic threshold, winner margin, and repeated support are met.
+- [ ] Missing, stale, and invalid semantic assets leave explicit-reference and
+      cross-translation quotation matching usable.
 - [ ] Unrelated sermon speech does not force a scripture result.
 - [ ] The featured result and alternatives never exceed one plus three.
+- [ ] Stop remains prompt during active semantic inference, and a late semantic
+      completion cannot update a stopped or restarted session.
 - [ ] Large accessibility text remains readable with no clipped controls or
       inaccessible actions on narrow and wide layouts.
 - [ ] Android release APK installs and launches with release signing.
@@ -71,6 +84,9 @@ platform.
       checks.
 - [ ] Under normal connectivity, a useful result appears within three seconds
       after enough identifying speech is available.
+- [ ] Profile measurements record semantic cold initialization, p50/p95 search
+      latency, and peak memory on both representative devices without private
+      text or vectors.
 - [ ] Stop and background leave no persisted sermon audio, transcript, detected
       passage history, or session history.
 - [ ] Device logs, crash output, and network diagnostics contain no sermon
@@ -79,6 +95,8 @@ platform.
       reviewed for the organization's account.
 - [ ] Bible ownership/distribution rights and required attribution are approved
       for this exact internal release.
+- [ ] BGE model attribution, MIT model-card terms, and bundled model
+      distribution are approved for this exact internal release.
 - [ ] Operators know that key rotation requires a newly signed rebuild and
       redistribution before revoking the old key.
 

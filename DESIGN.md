@@ -138,10 +138,13 @@ The recurring form language is softly restrained: 12dp corners for supporting pa
 - **Sheet Action:** A native `TextButton` with a 48dp minimum touch target.
 - **States:** Disabled and pressed appearances come from the Material theme. Do not hand-color them.
 
-### Inputs / Fields
+### Matching Summary
 
-- **Translation Selector:** An expanded `DropdownButtonFormField` with an outlined border and 16dp horizontal/vertical content padding.
-- **Behavior:** Translation cannot change during an active session. Long names use the field's available width rather than a fixed label area.
+The ready state contains no translation selector. One supporting semantic block
+states that matching uses all bundled translations and names the fixed display
+translation: NKJV when available, otherwise the deterministic fallback. If
+semantic matching is unavailable, explain neutrally that quotation matching
+remains active; do not style this as a fatal service error or disable Start.
 
 ### Cards / Containers
 
@@ -171,6 +174,7 @@ Surrounding context opens in a scroll-controlled native modal bottom sheet. It u
 - **Do** preserve wrapping, scrolling, semantic containers, descriptive control labels, and 48dp minimum interactive targets.
 - **Do** stop listening when the app leaves the foreground, disable the wakelock, and present any retained result as stale when the state says it is stale.
 - **Do** keep live transcript and passage history ephemeral and explain that behavior in the ready state.
+- **Do** name the display translation and explain that every bundled translation contributes matching evidence.
 
 ### Don't:
 
@@ -179,3 +183,4 @@ Surrounding context opens in a scroll-controlled native modal bottom sheet. It u
 - **Don't** freeze phone layouts onto wide screens; switch to the implemented 3:2 workspace at 600dp.
 - **Don't** hard-code platform fonts, bypass safe areas, clip large text, or replace native controls without a platform-specific need.
 - **Don't** imply background listening or preserve sermon/session history after listening stops.
+- **Don't** add translation selection or expose lexical-versus-semantic implementation details on individual results.

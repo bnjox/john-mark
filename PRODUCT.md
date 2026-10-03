@@ -12,23 +12,26 @@ Church AV operators using a phone during a live sermon to identify scripture qui
 
 ## Product Purpose
 
-John Mark captures foreground microphone audio, transcribes it live, and displays precision-first scripture matches from the operator's selected bundled translation. Success means a useful passage appears promptly when evidence is strong while uncertain or unrelated speech produces no result.
+John Mark captures foreground microphone audio, transcribes it live, and displays precision-first scripture matches using evidence from every bundled translation. Results display in NKJV when available, otherwise in a deterministic named fallback. Success means a useful passage appears promptly when evidence is strong while uncertain or unrelated speech produces no result.
 
 ## Positioning
 
-The product combines live transcription with deterministic, translation-specific on-device reference and quotation matching; it does not infer broad themes or use generated theological interpretation.
+The product combines live transcription with deterministic cross-translation reference and quotation matching plus guarded on-device semantic retrieval for differently worded quotations and paraphrases. It does not use an LLM, infer broad theological themes, or generate theological interpretation.
 
 ## Operating Context
 
-The app is used for 60–90 minute sermons in a dim AV environment. The operator selects a translation before listening, monitors one featured passage and up to three alternatives, and may open surrounding verse context. The app remains foreground-only and stops when backgrounded.
+The app is used for 60–90 minute sermons in a dim AV environment. The operator starts listening without choosing a translation, monitors one featured passage and up to three alternatives, and may open surrounding verse context. The app remains foreground-only and stops when backgrounded.
 
 ## Capabilities and Constraints
 
 - Flutter supports Android and iPhone from one codebase.
 - Deepgram Nova-3 receives live audio directly over WebSocket.
 - Sermon audio, transcript, passage history, and session history remain memory-only.
+- Semantic queries and vectors remain on-device and are not logged or persisted.
 - Bible translations are supplied privately and compiled into a bundled read-only SQLite database.
-- Explicit references and close quotations are supported; broad paraphrase inference is excluded.
+- All bundled translations contribute matching evidence; display and context use NKJV or a deterministic fallback.
+- Explicit references and strong lexical evidence outrank semantic evidence; ambiguous or weak evidence produces no result.
+- Missing or invalid semantic assets degrade to explicit-reference and quotation matching without disabling listening.
 - One featured passage and at most three alternatives are shown.
 - Connectivity loss discards queued audio and resumes from current speech without replay.
 
@@ -38,7 +41,7 @@ The product name is **John Mark**, described as a **Live Scripture Companion**. 
 
 ## Evidence on Hand
 
-The approved product design and interaction wireframes are in `docs/superpowers/specs/2026-09-24-mobile-scripture-listener-design.md`. Private Bible data and sermon evaluation fixtures must not be fabricated or committed.
+The original product design and interaction wireframes are in `docs/superpowers/specs/2026-09-24-mobile-scripture-listener-design.md`; the translation-neutral matching behavior is specified in `docs/superpowers/specs/2026-09-25-semantic-scripture-detection-design.md`. Private Bible data and sermon evaluation fixtures must not be fabricated or committed.
 
 ## Product Principles
 
