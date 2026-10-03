@@ -20,13 +20,13 @@ void main() {
       final controller = SessionController(
         audioSource: audio,
         transcriptionClient: _PrivacyClient(connection),
-        matchTranscript: (_, _) async => _match,
+        matchTranscript: (_) async => _match,
         resetMatcher: () {},
       );
 
       try {
         Directory.current = temporaryDirectory;
-        await controller.start(const Translation(id: 'test', name: 'Test'));
+        await controller.start();
         audio.frames.add(Uint8List.fromList([1, 2, 3, 4]));
         connection.providerEvents.add(
           const TranscriptionEvent(

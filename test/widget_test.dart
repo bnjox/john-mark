@@ -7,6 +7,7 @@ import 'package:john_mark/app.dart';
 import 'package:john_mark/core/models.dart';
 import 'package:john_mark/features/bible/bible_repository.dart';
 import 'package:john_mark/features/listener/listener_screen.dart';
+import 'package:john_mark/features/semantic/semantic_retriever.dart';
 import 'package:john_mark/features/session/session_controller.dart';
 import 'package:john_mark/features/transcription/transcription.dart';
 
@@ -37,10 +38,9 @@ void main() {
             home: ListenerScreen(
               controller: controller,
               repository: repository,
-              translations: translations,
+              displayTranslation: translations.first,
+              semanticStatus: ValueNotifier(SemanticStatus.ready),
               serviceConfigured: true,
-              loadTranslationId: () async => 'nkjv',
-              saveTranslationId: (_) async {},
               setWakelock: (enabled) async => wakelockChanges.add(enabled),
             ),
           ),
@@ -53,19 +53,22 @@ void main() {
     await pumpAt(const Size(390, 844));
     expect(find.text('John Mark'), findsOneWidget);
     expect(find.text('Ready'), findsOneWidget);
-    expect(find.text('New King James Version'), findsOneWidget);
+    expect(
+      find.text('Matches all bundled translations · Displays NKJV'),
+      findsOneWidget,
+    );
     expect(find.text('Start Listening'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Start Listening'));
     await tester.tap(find.text('Start Listening'));
     await tester.pump();
-    expect(controller.startedWith?.id, 'nkjv');
+    expect(controller.started, isTrue);
     expect(find.text('Listening'), findsOneWidget);
     expect(wakelockChanges, [true]);
 
     controller.emit(
       ListenerViewState(
         phase: SessionPhase.listening,
-        translation: translations.first,
         elapsed: const Duration(seconds: 37),
         transcript: const TranscriptUpdate(
           finalized: 'that whoever believes in him should not perish',
@@ -145,10 +148,9 @@ void main() {
         home: ListenerScreen(
           controller: controller,
           repository: _FakeBibleRepository(),
-          translations: const [Translation(id: 'nkjv', name: 'NKJV')],
+          displayTranslation: const Translation(id: 'nkjv', name: 'NKJV'),
+          semanticStatus: ValueNotifier(SemanticStatus.ready),
           serviceConfigured: true,
-          loadTranslationId: () async => 'nkjv',
-          saveTranslationId: (_) async {},
           setWakelock: (_) async {},
         ),
       ),
@@ -170,21 +172,15 @@ void main() {
         home: ListenerScreen(
           controller: controller,
           repository: _FakeBibleRepository(),
-          translations: const [Translation(id: 'nkjv', name: 'NKJV')],
+          displayTranslation: const Translation(id: 'nkjv', name: 'NKJV'),
+          semanticStatus: ValueNotifier(SemanticStatus.ready),
           serviceConfigured: true,
-          loadTranslationId: () async => 'nkjv',
-          saveTranslationId: (_) async {},
           setWakelock: (_) async {},
         ),
       ),
     );
     await tester.pump();
-    controller.emit(
-      const ListenerViewState(
-        phase: SessionPhase.connecting,
-        translation: Translation(id: 'nkjv', name: 'NKJV'),
-      ),
-    );
+    controller.emit(const ListenerViewState(phase: SessionPhase.connecting));
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
@@ -201,26 +197,21 @@ class _FakeSessionController extends SessionController {
     : super(
         audioSource: _UnusedAudioSource(),
         transcriptionClient: _UnusedTranscriptionClient(),
-        matchTranscript: (_, _) async => null,
+        matchTranscript: (_) async => null,
         resetMatcher: () {},
       );
 
   ListenerViewState _fakeState = const ListenerViewState();
-  Translation? startedWith;
+  bool started = false;
   int backgroundCount = 0;
 
   @override
   ListenerViewState get state => _fakeState;
 
   @override
-  Future<void> start(Translation translation) async {
-    startedWith = translation;
-    emit(
-      ListenerViewState(
-        phase: SessionPhase.listening,
-        translation: translation,
-      ),
-    );
+  Future<void> start() async {
+    started = true;
+    emit(const ListenerViewState(phase: SessionPhase.listening));
   }
 
   @override

@@ -7,8 +7,6 @@ import 'package:john_mark/features/session/bounded_audio_queue.dart';
 import 'package:john_mark/features/session/session_controller.dart';
 import 'package:john_mark/features/transcription/transcription.dart';
 
-const _translation = Translation(id: 'test', name: 'Test');
-
 void main() {
   test(
     'bounded queue drops oldest frames and clear releases a taker',
@@ -29,10 +27,7 @@ void main() {
   test('concurrent start opens and starts capture once', () async {
     final fixture = _Fixture();
 
-    await Future.wait([
-      fixture.controller.start(_translation),
-      fixture.controller.start(_translation),
-    ]);
+    await Future.wait([fixture.controller.start(), fixture.controller.start()]);
 
     expect(fixture.client.openCount, 1);
     expect(fixture.audio.startCount, 1);
@@ -42,7 +37,7 @@ void main() {
 
   test('concurrent stop and background close resources once', () async {
     final fixture = _Fixture();
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
 
     await Future.wait([
       fixture.controller.stop(),
@@ -61,7 +56,7 @@ void main() {
       final gate = Completer<TranscriptionConnection>();
       fixture.client.openGate = gate;
 
-      final start = fixture.controller.start(_translation);
+      final start = fixture.controller.start();
       await _flush();
       expect(fixture.controller.state.phase, SessionPhase.connecting);
 
@@ -80,12 +75,12 @@ void main() {
     final matchResult = Completer<MatchUpdate?>();
     final matchStarted = Completer<void>();
     final fixture = _Fixture(
-      matcher: (_, _) {
+      matcher: (_) {
         if (!matchStarted.isCompleted) matchStarted.complete();
         return matchResult.future;
       },
     );
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
     fixture.client.connections.single.eventsController.add(
       const TranscriptionEvent(
         type: TranscriptionEventType.finalized,
@@ -109,7 +104,7 @@ void main() {
     'awaits one send while retaining only the newest 64 queued frames',
     () async {
       final fixture = _Fixture();
-      await fixture.controller.start(_translation);
+      await fixture.controller.start();
       final connection = fixture.client.connections.single;
       connection.sendGate = Completer<void>();
 
@@ -140,7 +135,7 @@ void main() {
         return pending.completer.future;
       },
     );
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
     final firstAudio = fixture.audio.streams.single;
     firstAudio.add(Uint8List.fromList([1]));
     fixture.client.connections.first.eventsController.add(
@@ -196,7 +191,7 @@ void main() {
       },
     );
     fixture.client.failOpenAfterFirst = true;
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
 
     fixture.client.connections.single.eventsController.add(
       const TranscriptionEvent(type: TranscriptionEventType.disconnected),
@@ -226,7 +221,7 @@ void main() {
     test('$code is terminal and does not retry', () async {
       var delayCalls = 0;
       final fixture = _Fixture(reconnectDelay: (_) async => delayCalls++);
-      await fixture.controller.start(_translation);
+      await fixture.controller.start();
 
       fixture.client.connections.single.eventsController.add(
         TranscriptionEvent(type: TranscriptionEventType.error, errorCode: code),
@@ -248,7 +243,7 @@ void main() {
       TranscriptionFailure.authentication,
     );
 
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
 
     expect(fixture.controller.state.phase, SessionPhase.serviceError);
     expect(fixture.controller.state.message, contains('authentication'));
@@ -262,7 +257,7 @@ void main() {
     final fixture = _Fixture(reconnectDelay: (_) async => delayCalls++);
     fixture.audio.startError = StateError('no input');
 
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
 
     expect(fixture.controller.state.phase, SessionPhase.serviceError);
     expect(fixture.controller.state.message, contains('Microphone capture'));
@@ -273,7 +268,7 @@ void main() {
 
   test('runtime capture failure stops and closes the connection', () async {
     final fixture = _Fixture();
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
 
     fixture.audio.streams.single.addError(StateError('input lost'));
     await _flush();
@@ -288,7 +283,7 @@ void main() {
     var resets = 0;
     final fixture = _Fixture(resetMatcher: () => resets++);
 
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
     expect(resets, 1);
     await fixture.controller.stop();
     expect(resets, 2);
@@ -297,12 +292,12 @@ void main() {
   test('repeated final IDs append and match once', () async {
     var matches = 0;
     final fixture = _Fixture(
-      matcher: (_, _) async {
+      matcher: (_) async {
         matches++;
         return null;
       },
     );
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
     const finalEvent = TranscriptionEvent(
       type: TranscriptionEventType.finalized,
       text: 'John three sixteen',
@@ -321,7 +316,7 @@ void main() {
 
   test('finalized and interim transcript text stays bounded', () async {
     final fixture = _Fixture();
-    await fixture.controller.start(_translation);
+    await fixture.controller.start();
     final connection = fixture.client.connections.single;
 
     connection.eventsController.add(
@@ -351,30 +346,26 @@ void main() {
     await fixture.controller.stop();
   });
 
-  test(
-    'stop clears transcript, matches, IDs, translation, and timers',
-    () async {
-      final fixture = _Fixture(matcher: (_, _) async => _match);
-      await fixture.controller.start(_translation);
-      fixture.client.connections.single.eventsController.add(
-        const TranscriptionEvent(
-          type: TranscriptionEventType.finalized,
-          text: 'a final',
-          eventId: 'one',
-        ),
-      );
-      await _flush();
+  test('stop clears transcript, matches, IDs, and timers', () async {
+    final fixture = _Fixture(matcher: (_) async => _match);
+    await fixture.controller.start();
+    fixture.client.connections.single.eventsController.add(
+      const TranscriptionEvent(
+        type: TranscriptionEventType.finalized,
+        text: 'a final',
+        eventId: 'one',
+      ),
+    );
+    await _flush();
 
-      await fixture.controller.stop();
+    await fixture.controller.stop();
 
-      expect(fixture.controller.state.phase, SessionPhase.stopped);
-      expect(fixture.controller.state.translation, isNull);
-      expect(fixture.controller.state.transcript.finalized, isEmpty);
-      expect(fixture.controller.state.matches.featured, isNull);
-      expect(fixture.controller.state.elapsed, Duration.zero);
-      expect(fixture.controller.state.resultIsStale, isFalse);
-    },
-  );
+    expect(fixture.controller.state.phase, SessionPhase.stopped);
+    expect(fixture.controller.state.transcript.finalized, isEmpty);
+    expect(fixture.controller.state.matches.featured, isNull);
+    expect(fixture.controller.state.elapsed, Duration.zero);
+    expect(fixture.controller.state.resultIsStale, isFalse);
+  });
 }
 
 const _match = MatchUpdate(
@@ -405,7 +396,7 @@ class _Fixture {
     controller = SessionController(
       audioSource: audio,
       transcriptionClient: client,
-      matchTranscript: matcher ?? (_, _) async => null,
+      matchTranscript: matcher ?? (_) async => null,
       resetMatcher: resetMatcher ?? () {},
       reconnectDelay: reconnectDelay ?? (_) async {},
     );

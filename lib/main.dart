@@ -1,9 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app.dart';
+import 'core/models.dart';
+import 'features/bible/bible_repository.dart';
+import 'features/bible/display_translation_resolver.dart';
 import 'features/bible/sqlite_bible_repository.dart';
 import 'features/listener/listener_screen.dart';
-import 'features/matching/scripture_matcher.dart';
+import 'features/matching/scripture_detection_engine.dart';
+import 'features/semantic/bge_tokenizer.dart';
+import 'features/semantic/onnx_text_embedder.dart';
+import 'features/semantic/semantic_index.dart';
+import 'features/semantic/semantic_search_service.dart';
 import 'features/session/session_controller.dart';
 import 'features/transcription/deepgram_client.dart';
 import 'features/transcription/microphone_source.dart';
@@ -13,35 +23,104 @@ Future<void> main() async {
   try {
     final repository = await SqliteBibleRepository.open();
     final translations = await repository.translations();
-    final matchers = <String, ScriptureMatcher>{};
+    final displayTranslation = resolveDisplayTranslation(translations);
+    final semanticService = SemanticSearchService(
+      loadAssets: () => _loadSemanticComponents(repository, translations),
+    );
+    final detector = ScriptureDetectionEngine(
+      repository: repository,
+      translations: translations,
+      displayTranslation: displayTranslation,
+      semanticRetriever: semanticService,
+    );
     final controller = SessionController(
       audioSource: MicrophoneSource(),
       transcriptionClient: const DeepgramClient(),
-      resetMatcher: matchers.clear,
-      matchTranscript: (translationId, text) => matchers
-          .putIfAbsent(
-            translationId,
-            () => ScriptureMatcher(
-              repository: repository,
-              translationId: translationId,
-            ),
-          )
-          .match(text),
+      resetMatcher: detector.reset,
+      matchTranscript: detector.match,
     );
     runApp(
       JohnMarkApp(
-        home: ListenerScreen(
+        home: _RuntimeHome(
           controller: controller,
           repository: repository,
-          translations: translations,
+          semanticService: semanticService,
+          displayTranslation: displayTranslation,
           serviceConfigured: const String.fromEnvironment('DEEPGRAM_API_KEY')
               .isNotEmpty,
         ),
       ),
     );
+    unawaited(semanticService.initialize());
   } catch (_) {
     runApp(const JohnMarkApp(home: _MissingBibleScreen()));
   }
+}
+
+Future<SemanticComponents> _loadSemanticComponents(
+  BibleRepository repository,
+  List<Translation> translations,
+) async {
+  const modelId = 'BAAI/bge-base-en-v1.5';
+  const modelRevision = 'a5beb1e3e68b9ab74eb54cfd186867f64f240e1a';
+  const dimensions = 768;
+  final results = await Future.wait<Object>([
+    rootBundle.load('assets/semantic/scripture_embeddings.bin'),
+    repository.fingerprint(),
+  ]);
+  final data = results[0] as ByteData;
+  final index = SemanticIndex.parse(
+    data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+    expectedModelId: modelId,
+    expectedModelRevision: modelRevision,
+    expectedDimensions: dimensions,
+    expectedBibleFingerprint: results[1] as String,
+    expectedTranslationIds: translations.map((translation) => translation.id),
+  );
+  final tokenizer = await BgeTokenizer.fromAsset('assets/semantic/vocab.txt');
+  final embedder = await OnnxTextEmbedder.load(
+    tokenizer: tokenizer,
+    dimensions: dimensions,
+  );
+  return SemanticComponents(embedder: embedder, index: index);
+}
+
+class _RuntimeHome extends StatefulWidget {
+  const _RuntimeHome({
+    required this.controller,
+    required this.repository,
+    required this.semanticService,
+    required this.displayTranslation,
+    required this.serviceConfigured,
+  });
+
+  final SessionController controller;
+  final BibleRepository repository;
+  final SemanticSearchService semanticService;
+  final Translation displayTranslation;
+  final bool serviceConfigured;
+
+  @override
+  State<_RuntimeHome> createState() => _RuntimeHomeState();
+}
+
+class _RuntimeHomeState extends State<_RuntimeHome> {
+  @override
+  void dispose() {
+    widget.controller.dispose();
+    widget.semanticService.dispose();
+    unawaited(widget.repository.close());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenerScreen(
+    controller: widget.controller,
+    repository: widget.repository,
+    displayTranslation: widget.displayTranslation,
+    semanticStatus: widget.semanticService,
+    serviceConfigured: widget.serviceConfigured,
+  );
 }
 
 class _MissingBibleScreen extends StatelessWidget {

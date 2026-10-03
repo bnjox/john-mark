@@ -22,8 +22,10 @@ class SemanticIndex implements SemanticVectorIndex {
   factory SemanticIndex.parse(
     Uint8List bytes, {
     required String expectedModelId,
+    required String expectedModelRevision,
     required int expectedDimensions,
     required String expectedBibleFingerprint,
+    required Iterable<String> expectedTranslationIds,
   }) {
     if (bytes.length < _headerLength) {
       throw const FormatException('Truncated semantic index header');
@@ -59,9 +61,19 @@ class SemanticIndex implements SemanticVectorIndex {
     if (metadata.modelId != expectedModelId) {
       throw const FormatException('Semantic index model does not match');
     }
+    if (metadata.modelRevision != expectedModelRevision) {
+      throw const FormatException('Semantic index revision does not match');
+    }
     if (metadata.bibleFingerprint != expectedBibleFingerprint) {
       throw const FormatException(
         'Semantic index Bible fingerprint does not match',
+      );
+    }
+    final expectedTranslations = expectedTranslationIds.toList()..sort();
+    final indexedTranslations = [...metadata.translations]..sort();
+    if (!_sameStrings(expectedTranslations, indexedTranslations)) {
+      throw const FormatException(
+        'Semantic index translation set does not match',
       );
     }
 
@@ -205,6 +217,14 @@ class SemanticIndex implements SemanticVectorIndex {
           .toList(growable: false);
     });
   }
+}
+
+bool _sameStrings(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 SemanticAssetMetadata _parseMetadata(Uint8List bytes) {

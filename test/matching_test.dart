@@ -4,7 +4,6 @@ import 'package:john_mark/features/bible/bible_repository.dart';
 import 'package:john_mark/features/matching/match_stabilizer.dart';
 import 'package:john_mark/features/matching/quote_matcher.dart';
 import 'package:john_mark/features/matching/reference_parser.dart';
-import 'package:john_mark/features/matching/scripture_matcher.dart';
 
 void main() {
   const john316 = Passage(
@@ -186,65 +185,6 @@ void main() {
         hasLength(3),
       );
     });
-  });
-
-  test(
-    'ScriptureMatcher gives validated references priority over quotes',
-    () async {
-      final matcher = ScriptureMatcher(
-        repository: _FakeBibleRepository({
-          'alpha': [john316, corinthians],
-        }),
-        translationId: 'alpha',
-      );
-
-      final update = await matcher.match(
-        'The maker cherished the world. John chapter three verse sixteen.',
-      );
-
-      expect(update?.featured?.passage.label, 'John 3:16');
-      expect(update?.featured?.explicitReference, isTrue);
-    },
-  );
-
-  test('ScriptureMatcher suppresses tied non-overlapping quotations', () async {
-    const tied = Passage(
-      reference: ScriptureReference(
-        book: 45,
-        chapter: 8,
-        startVerse: 1,
-        endVerse: 1,
-      ),
-      label: 'Romans 8:1',
-      text: 'Maker cherished world offered beloved Son.',
-    );
-    final matcher = ScriptureMatcher(
-      repository: _FakeBibleRepository({
-        'alpha': [john316, tied],
-      }),
-      translationId: 'alpha',
-    );
-
-    final update = await matcher.match(
-      'Maker cherished world offered beloved Son',
-    );
-
-    expect(update, isNull);
-    expect(matcher.current.featured, isNull);
-  });
-
-  test('ScriptureMatcher reset clears displayed and pending history', () async {
-    final matcher = ScriptureMatcher(
-      repository: _FakeBibleRepository({
-        'alpha': [john316],
-      }),
-      translationId: 'alpha',
-    );
-
-    expect(await matcher.match(john316.text), isNotNull);
-    matcher.reset();
-    expect(matcher.current.featured, isNull);
-    expect(await matcher.match(john316.text), isNotNull);
   });
 }
 

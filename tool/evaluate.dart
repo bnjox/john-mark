@@ -5,12 +5,15 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:john_mark/core/models.dart';
 import 'package:john_mark/features/bible/bible_repository.dart';
-import 'package:john_mark/features/matching/scripture_matcher.dart';
+import 'package:john_mark/features/bible/display_translation_resolver.dart';
+import 'package:john_mark/features/matching/scripture_detection_engine.dart';
+import 'package:john_mark/features/semantic/semantic_retriever.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 const _usage =
     'Usage: dart run tool/evaluate.dart '
-    '--database <bibles.db> --fixtures <fixtures.ndjson>';
+    '--database <bibles.db> --fixtures <fixtures.ndjson>\n'
+    'Semantic model evaluation runs in the mobile profile workflow.';
 
 Future<void> main(List<String> arguments) async {
   try {
@@ -77,9 +80,8 @@ Future<EvaluationMetrics> evaluateFixtures(
   BibleRepository repository,
   File fixtures,
 ) async {
-  final translationIds = (await repository.translations())
-      .map((translation) => translation.id)
-      .toSet();
+  final translations = await repository.translations();
+  final displayTranslation = resolveDisplayTranslation(translations);
   var total = 0;
   var topOne = 0;
   var topFour = 0;
@@ -96,15 +98,11 @@ Future<EvaluationMetrics> evaluateFixtures(
     lineNumber++;
     if (rawLine.trim().isEmpty) continue;
     final fixture = _Fixture.parse(rawLine, lineNumber);
-    if (!translationIds.contains(fixture.translation)) {
-      throw _FixtureException(
-        lineNumber,
-        'translation is not present in the database.',
-      );
-    }
-    final matcher = ScriptureMatcher(
+    final matcher = ScriptureDetectionEngine(
       repository: repository,
-      translationId: fixture.translation,
+      translations: translations,
+      displayTranslation: displayTranslation,
+      semanticRetriever: const _UnavailableSemanticRetriever(),
     );
 
     final stopwatch = Stopwatch()..start();
@@ -113,11 +111,11 @@ Future<EvaluationMetrics> evaluateFixtures(
       update = await matcher.match(window) ?? update;
     }
     stopwatch.stop();
-    update ??= matcher.current;
+    final settled = update ?? matcher.current;
 
     final candidates = <MatchCandidate>[
-      ?update.featured,
-      ...update.alternatives,
+      ?settled.featured,
+      ...settled.alternatives,
     ];
     total++;
     elapsedMicroseconds.add(stopwatch.elapsedMicroseconds);
@@ -174,11 +172,7 @@ class _Options {
 }
 
 class _Fixture {
-  const _Fixture({
-    required this.translation,
-    required this.windows,
-    required this.expected,
-  });
+  const _Fixture({required this.windows, required this.expected});
 
   factory _Fixture.parse(String line, int lineNumber) {
     Object? decoded;
@@ -190,13 +184,9 @@ class _Fixture {
     if (decoded is! Map<String, dynamic>) {
       throw _FixtureException(lineNumber, 'row must be a JSON object.');
     }
-    final translation = decoded['translation'];
     final transcript = decoded['transcript'];
     final rawWindows = decoded['windows'];
     final expected = decoded['expected'];
-    if (translation is! String || translation.trim().isEmpty) {
-      throw _FixtureException(lineNumber, 'translation must be a string.');
-    }
     if (transcript != null && rawWindows != null) {
       throw _FixtureException(
         lineNumber,
@@ -236,13 +226,11 @@ class _Fixture {
       throw _FixtureException(lineNumber, 'expected must not be empty.');
     }
     return _Fixture(
-      translation: translation,
       windows: List.unmodifiable(windows),
       expected: expected as String?,
     );
   }
 
-  final String translation;
   final List<String> windows;
   final String? expected;
 }
@@ -276,6 +264,17 @@ class _FixtureException implements Exception {
 
   final int line;
   final String message;
+}
+
+class _UnavailableSemanticRetriever implements SemanticRetriever {
+  const _UnavailableSemanticRetriever();
+
+  @override
+  SemanticStatus get status => SemanticStatus.unavailable;
+
+  @override
+  Future<List<SemanticHit>> search(String text, {int limit = 8}) async =>
+      const [];
 }
 
 class _CliBibleRepository implements BibleRepository {

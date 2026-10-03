@@ -72,7 +72,7 @@ class _Repository implements BibleRepository {
   Future<Passage?> passage(
     String translationId,
     ScriptureReference reference,
-  ) async => null;
+  ) async => reference == passageValue.reference ? passageValue : null;
 
   @override
   Future<List<Passage>> quoteCandidates(

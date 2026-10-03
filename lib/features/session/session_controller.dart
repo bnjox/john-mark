@@ -6,10 +6,7 @@ import '../../core/models.dart';
 import '../transcription/transcription.dart';
 import 'bounded_audio_queue.dart';
 
-typedef TranscriptMatcher = Future<MatchUpdate?> Function(
-  String translationId,
-  String finalizedText,
-);
+typedef TranscriptMatcher = Future<MatchUpdate?> Function(String finalizedText);
 typedef ReconnectDelay = Future<void> Function(Duration duration);
 typedef MatcherReset = void Function();
 
@@ -61,27 +58,21 @@ class SessionController extends ChangeNotifier {
 
   ListenerViewState get state => _state;
 
-  Future<void> start(Translation translation) => _serialize(() async {
+  Future<void> start() => _serialize(() async {
     if (_active) return;
     final generation = ++_generation;
     resetMatcher();
     _matchWork = _MatchWork(generation);
     _active = true;
     _reconnectAttempt = 0;
-    _setState(
-      ListenerViewState(
-        phase: SessionPhase.connecting,
-        translation: translation,
-      ),
-    );
+    _setState(const ListenerViewState(phase: SessionPhase.connecting));
 
     if (!await audioSource.hasPermission()) {
       if (!_isCurrent(generation)) return;
       _active = false;
       _setState(
-        ListenerViewState(
+        const ListenerViewState(
           phase: SessionPhase.permissionDenied,
-          translation: translation,
           message: 'Microphone permission is required.',
         ),
       );
@@ -387,9 +378,7 @@ class SessionController extends ChangeNotifier {
   Future<void> _runMatch(_MatchWork work, String finalizedText) async {
     work.inFlight = true;
     try {
-      final translationId = _state.translation?.id;
-      if (translationId == null) return;
-      final match = await matchTranscript(translationId, finalizedText);
+      final match = await matchTranscript(finalizedText);
       if (identical(_matchWork, work) &&
           _isCurrent(work.generation) &&
           match != null) {
@@ -472,7 +461,6 @@ class SessionController extends ChangeNotifier {
     bool? resultIsStale,
   }) => ListenerViewState(
     phase: phase ?? _state.phase,
-    translation: _state.translation,
     transcript: transcript ?? _state.transcript,
     matches: matches ?? _state.matches,
     elapsed: elapsed ?? _state.elapsed,

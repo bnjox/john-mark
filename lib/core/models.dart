@@ -88,7 +88,6 @@ class TranscriptUpdate {
 class ListenerViewState {
   const ListenerViewState({
     this.phase = SessionPhase.ready,
-    this.translation,
     this.transcript = const TranscriptUpdate(),
     this.matches = const MatchUpdate(),
     this.elapsed = Duration.zero,
@@ -97,7 +96,6 @@ class ListenerViewState {
   });
 
   final SessionPhase phase;
-  final Translation? translation;
   final TranscriptUpdate transcript;
   final MatchUpdate matches;
   final Duration elapsed;

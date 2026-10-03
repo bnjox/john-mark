@@ -1,37 +1,34 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/models.dart';
 import '../bible/bible_repository.dart';
+import '../semantic/semantic_retriever.dart';
 import '../session/session_controller.dart';
 import 'passage_sheet.dart';
 import 'scripture_panel.dart';
 
-typedef TranslationIdLoader = Future<String?> Function();
-typedef TranslationIdSaver = Future<void> Function(String id);
 typedef WakelockSetter = Future<void> Function(bool enabled);
 
 class ListenerScreen extends StatefulWidget {
   const ListenerScreen({
     required this.controller,
     required this.repository,
-    required this.translations,
+    required this.displayTranslation,
+    required this.semanticStatus,
     required this.serviceConfigured,
-    this.loadTranslationId = _loadTranslationId,
-    this.saveTranslationId = _saveTranslationId,
     this.setWakelock = _setWakelock,
     super.key,
   });
 
   final SessionController controller;
   final BibleRepository repository;
-  final List<Translation> translations;
+  final Translation displayTranslation;
+  final ValueListenable<SemanticStatus> semanticStatus;
   final bool serviceConfigured;
-  final TranslationIdLoader loadTranslationId;
-  final TranslationIdSaver saveTranslationId;
   final WakelockSetter setWakelock;
 
   @override
@@ -40,7 +37,6 @@ class ListenerScreen extends StatefulWidget {
 
 class _ListenerScreenState extends State<ListenerScreen>
     with WidgetsBindingObserver {
-  Translation? _selectedTranslation;
   MatchCandidate? _promoted;
   MatchCandidate? _lastControllerFeatured;
   bool _wakelockEnabled = false;
@@ -50,7 +46,6 @@ class _ListenerScreenState extends State<ListenerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_onControllerChanged);
-    _restoreTranslation();
   }
 
   @override
@@ -73,17 +68,6 @@ class _ListenerScreenState extends State<ListenerScreen>
     }
   }
 
-  Future<void> _restoreTranslation() async {
-    final savedId = await widget.loadTranslationId();
-    if (!mounted) return;
-    final saved = widget.translations.where((item) => item.id == savedId);
-    setState(() {
-      _selectedTranslation = saved.isNotEmpty
-          ? saved.first
-          : widget.translations.firstOrNull;
-    });
-  }
-
   void _onControllerChanged() {
     final state = widget.controller.state;
     if (!identical(_lastControllerFeatured, state.matches.featured)) {
@@ -98,23 +82,14 @@ class _ListenerScreenState extends State<ListenerScreen>
     if (mounted) setState(() {});
   }
 
-  Future<void> _selectTranslation(Translation? translation) async {
-    if (translation == null || _isActive(widget.controller.state.phase)) return;
-    setState(() => _selectedTranslation = translation);
-    await widget.saveTranslationId(translation.id);
-  }
-
   Future<void> _showContext(MatchCandidate candidate) async {
-    final translation =
-        widget.controller.state.translation ?? _selectedTranslation;
-    if (translation == null) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: false,
       builder: (_) => PassageSheet(
         repository: widget.repository,
-        translationId: translation.id,
+        translationId: widget.displayTranslation.id,
         passage: candidate.passage,
       ),
     );
@@ -139,19 +114,20 @@ class _ListenerScreenState extends State<ListenerScreen>
           builder: (context, _) {
             final state = widget.controller.state;
             if (!_isActive(state.phase)) {
-              return _ReadyView(
-                state: state,
-                translations: widget.translations,
-                selectedTranslation: _selectedTranslation,
-                serviceConfigured: widget.serviceConfigured,
-                onTranslationChanged: _selectTranslation,
-                onStart: _selectedTranslation == null
-                    ? null
-                    : () => widget.controller.start(_selectedTranslation!),
+              return ValueListenableBuilder<SemanticStatus>(
+                valueListenable: widget.semanticStatus,
+                builder: (context, semanticStatus, _) => _ReadyView(
+                  state: state,
+                  displayTranslation: widget.displayTranslation,
+                  semanticStatus: semanticStatus,
+                  serviceConfigured: widget.serviceConfigured,
+                  onStart: widget.controller.start,
+                ),
               );
             }
             return _ListeningView(
               state: state,
+              displayTranslation: widget.displayTranslation,
               promoted: _promoted,
               onPromote: (candidate) => setState(() => _promoted = candidate),
               onFeaturedTap: _showContext,
@@ -167,24 +143,23 @@ class _ListenerScreenState extends State<ListenerScreen>
 class _ReadyView extends StatelessWidget {
   const _ReadyView({
     required this.state,
-    required this.translations,
-    required this.selectedTranslation,
+    required this.displayTranslation,
+    required this.semanticStatus,
     required this.serviceConfigured,
-    required this.onTranslationChanged,
     required this.onStart,
   });
 
   final ListenerViewState state;
-  final List<Translation> translations;
-  final Translation? selectedTranslation;
+  final Translation displayTranslation;
+  final SemanticStatus semanticStatus;
   final bool serviceConfigured;
-  final ValueChanged<Translation?> onTranslationChanged;
-  final VoidCallback? onStart;
+  final VoidCallback onStart;
 
   @override
   Widget build(BuildContext context) {
-    final canStart = serviceConfigured && selectedTranslation != null;
+    final canStart = serviceConfigured;
     final colors = Theme.of(context).colorScheme;
+    final displayName = _displayName(displayTranslation);
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
@@ -199,31 +174,17 @@ class _ReadyView extends StatelessWidget {
                 children: [
                   _StatusLine(phase: state.phase, elapsed: state.elapsed),
                   const SizedBox(height: 32),
-                  Text(
-                    'Translation',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<Translation>(
-                    initialValue: selectedTranslation,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
+                  Semantics(
+                    container: true,
+                    label:
+                        'Matches all bundled translations. Displays $displayName.',
+                    child: Text(
+                      'Matches all bundled translations · Displays $displayName',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        height: 1.45,
                       ),
                     ),
-                    hint: const Text('Select a translation'),
-                    items: translations
-                        .map(
-                          (translation) => DropdownMenuItem(
-                            value: translation,
-                            child: Text(translation.name),
-                          ),
-                        )
-                        .toList(growable: false),
-                    onChanged: onTranslationChanged,
                   ),
                   const SizedBox(height: 28),
                   Text(
@@ -251,11 +212,12 @@ class _ReadyView extends StatelessWidget {
                       style: TextStyle(color: colors.error),
                     ),
                   ],
-                  if (translations.isEmpty) ...[
+                  if (semanticStatus == SemanticStatus.unavailable) ...[
                     const SizedBox(height: 12),
                     Text(
-                      'No Bible translations are available.',
-                      style: TextStyle(color: colors.error),
+                      'Paraphrase matching unavailable · quotation matching remains active',
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: colors.onSurfaceVariant),
                     ),
                   ],
                   const SizedBox(height: 32),
@@ -288,6 +250,7 @@ class _ReadyView extends StatelessWidget {
 class _ListeningView extends StatelessWidget {
   const _ListeningView({
     required this.state,
+    required this.displayTranslation,
     required this.promoted,
     required this.onPromote,
     required this.onFeaturedTap,
@@ -295,6 +258,7 @@ class _ListeningView extends StatelessWidget {
   });
 
   final ListenerViewState state;
+  final Translation displayTranslation;
   final MatchCandidate? promoted;
   final ValueChanged<MatchCandidate> onPromote;
   final ValueChanged<MatchCandidate> onFeaturedTap;
@@ -331,6 +295,15 @@ class _ListeningView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _StatusLine(phase: state.phase, elapsed: state.elapsed),
+                  if (!_isNkjv(displayTranslation)) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Displaying ${displayTranslation.name}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   if (wide)
                     Row(
@@ -490,14 +463,16 @@ String _formatDuration(Duration duration) {
   return '$hours:$minutes:$seconds';
 }
 
-Future<String?> _loadTranslationId() async {
-  final preferences = await SharedPreferences.getInstance();
-  return preferences.getString('selected_translation_id');
-}
+String _displayName(Translation translation) =>
+    _isNkjv(translation) ? 'NKJV' : translation.name;
 
-Future<void> _saveTranslationId(String id) async {
-  final preferences = await SharedPreferences.getInstance();
-  await preferences.setString('selected_translation_id', id);
+bool _isNkjv(Translation translation) {
+  final id = translation.id.trim().toLowerCase();
+  final name = translation.name.trim().toLowerCase().replaceAll(
+    RegExp(r'\s+'),
+    ' ',
+  );
+  return id == 'nkjv' || name == 'new king james version';
 }
 
 Future<void> _setWakelock(bool enabled) =>
