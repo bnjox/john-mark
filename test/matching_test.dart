@@ -1,9 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:john_mark/core/models.dart';
 import 'package:john_mark/features/bible/bible_repository.dart';
-import 'package:john_mark/features/bible/display_translation_resolver.dart';
-import 'package:john_mark/features/matching/detection_evidence.dart';
-import 'package:john_mark/features/matching/lexical_evidence_matcher.dart';
 import 'package:john_mark/features/matching/match_stabilizer.dart';
 import 'package:john_mark/features/matching/quote_matcher.dart';
 import 'package:john_mark/features/matching/reference_parser.dart';
@@ -32,101 +29,6 @@ void main() {
         'Love is patient and kind. Love does not envy or boast. '
         'It protects, trusts, hopes, and perseveres.',
   );
-
-  test('prefers NKJV id, then full name, then deterministic fallback', () {
-    expect(
-      resolveDisplayTranslation(const [
-        Translation(id: 'kjv', name: 'King James Version'),
-        Translation(id: ' NKJV ', name: 'Abbreviated'),
-      ]).id,
-      ' NKJV ',
-    );
-    expect(
-      resolveDisplayTranslation(const [
-        Translation(id: 'primary', name: ' New  King James Version '),
-        Translation(id: 'other', name: 'Other'),
-      ]).id,
-      'primary',
-    );
-    expect(
-      resolveDisplayTranslation(const [
-        Translation(id: 'z', name: 'Alpha'),
-        Translation(id: 'a', name: 'Zulu'),
-      ]).id,
-      'a',
-    );
-    expect(() => resolveDisplayTranslation(const []), throwsStateError);
-  });
-
-  group('LexicalEvidenceMatcher', () {
-    test(
-      'matches wording from any translation and retains its source',
-      () async {
-        const beta = Passage(
-          reference: ScriptureReference(
-            book: 43,
-            chapter: 3,
-            startVerse: 16,
-            endVerse: 16,
-          ),
-          label: 'John 3:16',
-          text: 'Completely different wording in the second translation.',
-        );
-        final matches = await LexicalEvidenceMatcher(
-          _FakeBibleRepository({
-            'alpha': [john316],
-            'beta': [beta],
-          }),
-        ).match(beta.text);
-
-        expect(matches.single.reference, john316.reference);
-        expect(matches.single.sourceTranslationId, 'beta');
-        expect(matches.single.kind, EvidenceKind.lexical);
-      },
-    );
-
-    test('merges duplicate references using the strongest source', () async {
-      const weaker = Passage(
-        reference: ScriptureReference(
-          book: 43,
-          chapter: 3,
-          startVerse: 16,
-          endVerse: 16,
-        ),
-        label: 'John 3:16',
-        text: 'Maker cherished world and gave a Son with other words.',
-      );
-      final matches = await LexicalEvidenceMatcher(
-        _FakeBibleRepository({
-          'alpha': [weaker],
-          'beta': [john316],
-        }),
-      ).match(john316.text);
-
-      expect(matches, hasLength(1));
-      expect(matches.single.sourceTranslationId, 'beta');
-    });
-
-    test('suppresses materially tied non-overlapping leaders', () async {
-      const romans = Passage(
-        reference: ScriptureReference(
-          book: 45,
-          chapter: 8,
-          startVerse: 1,
-          endVerse: 1,
-        ),
-        label: 'Romans 8:1',
-        text: 'Maker cherished the world and offered the beloved Son.',
-      );
-      final matches = await LexicalEvidenceMatcher(
-        _FakeBibleRepository({
-          'alpha': [john316, romans],
-        }),
-      ).match(john316.text);
-
-      expect(matches, isEmpty);
-    });
-  });
 
   group('ReferenceParser', () {
     test('parses compact spoken and ordinal range references', () async {
@@ -159,22 +61,6 @@ void main() {
         await parser.parse('John spoke for three minutes', 'alpha'),
         isNull,
       );
-    });
-
-    test('validates explicit references in display-first order', () async {
-      final repository = _FakeBibleRepository({
-        'other': [john316],
-        'nkjv': [john316],
-      });
-      final evidence = await ReferenceParser(repository)
-          .parseAny('John chapter three verse sixteen', const [
-            Translation(id: 'other', name: 'Other'),
-            Translation(id: 'nkjv', name: 'New King James Version'),
-          ]);
-
-      expect(evidence?.kind, EvidenceKind.explicitReference);
-      expect(evidence?.sourceTranslationId, 'nkjv');
-      expect(repository.passageQueries, ['nkjv']);
     });
   });
 
@@ -210,6 +96,29 @@ void main() {
         isEmpty,
       );
       expect(await matcher.match('love one another', 'alpha'), isEmpty);
+    });
+
+    test('searches only the selected translation', () async {
+      const otherTranslation = Passage(
+        reference: ScriptureReference(
+          book: 43,
+          chapter: 3,
+          startVerse: 16,
+          endVerse: 16,
+        ),
+        label: 'John 3:16',
+        text: 'Completely different wording in the second translation.',
+      );
+      final repository = _FakeBibleRepository({
+        'alpha': [john316],
+        'beta': [otherTranslation],
+      });
+      final matcher = QuoteMatcher(repository);
+
+      final matches = await matcher.match(john316.text, 'alpha');
+
+      expect(matches.single.passage.text, john316.text);
+      expect(repository.queriedTranslations, ['alpha']);
     });
   });
 
@@ -350,14 +259,13 @@ class _FakeBibleRepository implements BibleRepository {
   _FakeBibleRepository(this.passagesByTranslation);
 
   final Map<String, List<Passage>> passagesByTranslation;
-  final List<String> passageQueries = [];
+  final List<String> queriedTranslations = [];
 
   @override
   Future<Passage?> passage(
     String translationId,
     ScriptureReference reference,
   ) async {
-    passageQueries.add(translationId);
     for (final passage in passagesByTranslation[translationId] ?? const []) {
       if (_sameReference(passage.reference, reference)) return passage;
     }
@@ -370,6 +278,7 @@ class _FakeBibleRepository implements BibleRepository {
     List<String> tokens, {
     int limit = 40,
   }) async {
+    queriedTranslations.add(translationId);
     return (passagesByTranslation[translationId] ?? const [])
         .take(limit)
         .toList(growable: false);
