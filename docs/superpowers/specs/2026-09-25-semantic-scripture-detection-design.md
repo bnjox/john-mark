@@ -214,7 +214,7 @@ After the Bible database and model assets exist, the supported command will be:
 uv run tool/build_semantic_index.py \
   --database assets/bibles.db \
   --model private/models/bge-base-en-v1.5 \
-  --output assets/scripture_embeddings.bin
+  --output assets/semantic/scripture_embeddings.bin
 ```
 
 Implementation may add required explicit flags, but must keep this command and

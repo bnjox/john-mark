@@ -1,0 +1,14 @@
+{
+  "repository": "BAAI/bge-base-en-v1.5",
+  "revision": "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a",
+  "license": "MIT (as declared by the pinned model card; no standalone license file is present)",
+  "files": {
+    "README.md": {"size": 94551, "sha256": "fd29e6117a8c2bc83f8eafb73f261d35341702dcd95c9cc0b34f5be75afa8231"},
+    "config.json": {"size": 777, "sha256": "bc00af31a4a31b74040d73370aa83b62da34c90b75eb77bfa7db039d90abd591"},
+    "onnx/model.onnx": {"size": 435811539, "sha256": "9bc579acdba21c253c62a9bf866891355a63ffa3442b52c8a37d75b2ccb91848"},
+    "special_tokens_map.json": {"size": 125, "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"},
+    "tokenizer.json": {"size": 711396, "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"},
+    "tokenizer_config.json": {"size": 366, "sha256": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3"},
+    "vocab.txt": {"size": 231508, "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"}
+  }
+}

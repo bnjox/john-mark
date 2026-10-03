@@ -50,6 +50,9 @@ app.*.map.json
 # Private and generated scripture data
 /private/bibles/
 /private/evaluation/
+/private/models/
 /assets/bibles.db
+/assets/semantic/*
+!/assets/semantic/.gitkeep
 *.env
 /.impeccable/review/
