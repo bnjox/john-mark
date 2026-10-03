@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
@@ -173,6 +176,79 @@ class SqliteBibleRepository implements BibleRepository {
   }
 
   @override
+  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
+    List<String> tokens, {
+    int limitPerTranslation = 40,
+  }) async {
+    if (limitPerTranslation <= 0) return const [];
+    final distinctTokens = _boundedTokens(tokens);
+    if (distinctTokens.isEmpty) return const [];
+    final placeholders = List.filled(distinctTokens.length, '?').join(', ');
+    final rows = await _database.rawQuery(
+      '''
+        WITH ranked AS (
+          SELECT p.*, b.name AS book_name,
+            COUNT(DISTINCT t.token) AS token_hits,
+            ROW_NUMBER() OVER (
+              PARTITION BY p.translation_id
+              ORDER BY COUNT(DISTINCT t.token) DESC,
+                p.book_number, p.chapter, p.start_verse, p.end_verse, p.id
+            ) AS translation_rank
+          FROM passage_tokens t
+          JOIN passages p ON p.id = t.passage_id
+          JOIN books b
+            ON b.translation_id = p.translation_id
+            AND b.number = p.book_number
+          WHERE t.token IN ($placeholders)
+          GROUP BY p.id
+        )
+        SELECT * FROM ranked
+        WHERE translation_rank <= ?
+        ORDER BY translation_id COLLATE NOCASE, translation_id,
+          translation_rank, book_number, chapter, start_verse, end_verse, id
+      ''',
+      [...distinctTokens, limitPerTranslation.clamp(1, 40)],
+    );
+    return rows
+        .map(
+          (row) => SourcedPassage(
+            translationId: row['translation_id']! as String,
+            passage: _passageFromRow(row),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<String> fingerprint() async {
+    final versionRows = await _database.rawQuery('PRAGMA user_version');
+    final schemaVersion = versionRows.single.values.single! as int;
+    final verses = await _database.rawQuery('''
+      SELECT translation_id, book_number, chapter, start_verse, end_verse,
+        display_text
+      FROM passages
+      WHERE start_verse = end_verse
+      ORDER BY translation_id COLLATE BINARY, book_number, chapter,
+        start_verse, end_verse
+    ''');
+    final bytes = BytesBuilder(copy: false)
+      ..add(_lengthPrefixed('$schemaVersion'));
+    for (final verse in verses) {
+      for (final field in [
+        verse['translation_id'],
+        verse['book_number'],
+        verse['chapter'],
+        verse['start_verse'],
+        verse['end_verse'],
+        verse['display_text'],
+      ]) {
+        bytes.add(_lengthPrefixed('$field'));
+      }
+    }
+    return sha256.convert(bytes.takeBytes()).toString();
+  }
+
+  @override
   Future<void> close() => _database.close();
 
   Future<List<Map<String, Object?>>> _individualVerses(
@@ -202,6 +278,21 @@ class SqliteBibleRepository implements BibleRepository {
       ],
     );
   }
+}
+
+List<String> _boundedTokens(List<String> tokens) => tokens
+    .map((token) => token.trim().toLowerCase())
+    .where((token) => RegExp(r'^[a-z0-9]+$').hasMatch(token))
+    .toSet()
+    .take(64)
+    .toList(growable: false);
+
+Uint8List _lengthPrefixed(String value) {
+  final valueBytes = utf8.encode(value);
+  final result = Uint8List(4 + valueBytes.length);
+  ByteData.sublistView(result).setUint32(0, valueBytes.length, Endian.little);
+  result.setRange(4, result.length, valueBytes);
+  return result;
 }
 
 bool _covers(List<Map<String, Object?>> rows, int start, int end) {

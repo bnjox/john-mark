@@ -1,10 +1,12 @@
 import '../../core/models.dart';
 
 class MatchConfig {
+  static const defaultReplacementMargin = 0.06;
+
   const MatchConfig({
     this.strongThreshold = 0.78,
     this.possibleThreshold = 0.68,
-    this.replacementMargin = 0.06,
+    this.replacementMargin = defaultReplacementMargin,
     this.confirmationWindows = 2,
   });
 
@@ -22,7 +24,7 @@ class MatchStabilizer {
   final MatchConfig config;
 
   MatchUpdate _current = const MatchUpdate();
-  String? _pendingReference;
+  ScriptureReference? _pendingReference;
   int _pendingWindows = 0;
 
   MatchUpdate get current => _current;
@@ -68,7 +70,7 @@ class MatchStabilizer {
       _clearPending();
       return true;
     }
-    final key = _referenceKey(candidate.passage.reference);
+    final key = candidate.passage.reference;
     if (_pendingReference == key) {
       _pendingWindows++;
     } else {

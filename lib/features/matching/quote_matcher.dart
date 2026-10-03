@@ -29,7 +29,7 @@ class QuoteMatcher {
     for (final passage in passages.take(maxCandidates)) {
       final candidateTokens = significantTokens(passage.text);
       if (candidateTokens.length < 4) continue;
-      final score = _bestScore(query, candidateTokens);
+      final score = lexicalMatchScore(query, candidateTokens);
       if (score < possibleThreshold) continue;
       matches.add(
         MatchCandidate(
@@ -52,7 +52,7 @@ class QuoteMatcher {
   }
 }
 
-double _bestScore(List<String> query, List<String> candidate) {
+double lexicalMatchScore(List<String> query, List<String> candidate) {
   if (candidate.length <= QuoteMatcher.maxSignificantTokens) {
     return _score(query, candidate);
   }

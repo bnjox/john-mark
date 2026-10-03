@@ -31,6 +31,18 @@ class ScriptureReference {
   final int chapter;
   final int startVerse;
   final int endVerse;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScriptureReference &&
+          book == other.book &&
+          chapter == other.chapter &&
+          startVerse == other.startVerse &&
+          endVerse == other.endVerse;
+
+  @override
+  int get hashCode => Object.hash(book, chapter, startVerse, endVerse);
 }
 
 class Passage {

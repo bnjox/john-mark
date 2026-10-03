@@ -275,6 +275,15 @@ class _FakeBibleRepository implements BibleRepository {
   }) async => const [];
 
   @override
+  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
+    List<String> tokens, {
+    int limitPerTranslation = 40,
+  }) async => const [];
+
+  @override
+  Future<String> fingerprint() async => 'fake-fingerprint';
+
+  @override
   Future<List<Translation>> translations() async => const [];
 }
 

@@ -82,6 +82,17 @@ class _Repository implements BibleRepository {
   }) async => const [passageValue];
 
   @override
+  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
+    List<String> tokens, {
+    int limitPerTranslation = 40,
+  }) async => const [
+    SourcedPassage(translationId: 'test', passage: passageValue),
+  ];
+
+  @override
+  Future<String> fingerprint() async => 'fake-fingerprint';
+
+  @override
   Future<List<Translation>> translations() async => const [
     Translation(id: 'test', name: 'Test'),
   ];

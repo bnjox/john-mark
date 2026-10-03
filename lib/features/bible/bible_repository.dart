@@ -1,4 +1,7 @@
 import '../../core/models.dart';
+import '../matching/detection_evidence.dart';
+
+export '../matching/detection_evidence.dart' show SourcedPassage;
 
 abstract interface class BibleRepository {
   Future<List<Translation>> translations();
@@ -17,6 +20,13 @@ abstract interface class BibleRepository {
     List<String> tokens, {
     int limit = 40,
   });
+
+  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
+    List<String> tokens, {
+    int limitPerTranslation = 40,
+  });
+
+  Future<String> fingerprint();
 
   Future<void> close();
 }

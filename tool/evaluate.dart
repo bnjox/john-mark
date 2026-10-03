@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:john_mark/core/models.dart';
 import 'package:john_mark/features/bible/bible_repository.dart';
 import 'package:john_mark/features/matching/scripture_matcher.dart';
@@ -400,6 +402,55 @@ class _CliBibleRepository implements BibleRepository {
   }
 
   @override
+  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
+    List<String> tokens, {
+    int limitPerTranslation = 40,
+  }) async {
+    final results = <SourcedPassage>[];
+    for (final translation in await translations()) {
+      final passages = await quoteCandidates(
+        translation.id,
+        tokens,
+        limit: limitPerTranslation,
+      );
+      results.addAll(
+        passages.map(
+          (passage) =>
+              SourcedPassage(translationId: translation.id, passage: passage),
+        ),
+      );
+    }
+    return results;
+  }
+
+  @override
+  Future<String> fingerprint() async {
+    final version = _database.select('PRAGMA user_version').first.values.first;
+    final verses = _database.select('''
+      SELECT translation_id, book_number, chapter, start_verse, end_verse,
+        display_text
+      FROM passages
+      WHERE start_verse = end_verse
+      ORDER BY translation_id COLLATE BINARY, book_number, chapter,
+        start_verse, end_verse
+    ''');
+    final bytes = BytesBuilder(copy: false)..add(_fingerprintField('$version'));
+    for (final verse in verses) {
+      for (final field in [
+        verse['translation_id'],
+        verse['book_number'],
+        verse['chapter'],
+        verse['start_verse'],
+        verse['end_verse'],
+        verse['display_text'],
+      ]) {
+        bytes.add(_fingerprintField('$field'));
+      }
+    }
+    return sha256.convert(bytes.takeBytes()).toString();
+  }
+
+  @override
   Future<void> close() async => _database.close();
 
   ResultSet _individualVerses(
@@ -425,6 +476,14 @@ class _CliBibleRepository implements BibleRepository {
       ],
     );
   }
+}
+
+Uint8List _fingerprintField(String value) {
+  final valueBytes = utf8.encode(value);
+  final result = Uint8List(4 + valueBytes.length);
+  ByteData.sublistView(result).setUint32(0, valueBytes.length, Endian.little);
+  result.setRange(4, result.length, valueBytes);
+  return result;
 }
 
 bool _covers(List<Row> rows, int start, int end) {
