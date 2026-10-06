@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'core/models.dart';
+import 'core/performance_trace.dart';
 import 'features/bible/bible_repository.dart';
 import 'features/bible/display_translation_resolver.dart';
 import 'features/bible/sqlite_bible_repository.dart';
@@ -15,45 +16,56 @@ import 'features/semantic/onnx_text_embedder.dart';
 import 'features/semantic/semantic_index.dart';
 import 'features/semantic/semantic_search_service.dart';
 import 'features/session/session_controller.dart';
+import 'features/startup/runtime_bootstrap_screen.dart';
 import 'features/transcription/deepgram_client.dart';
 import 'features/transcription/microphone_source.dart';
 
-Future<void> main() async {
+void main() {
+  final started = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    final repository = await SqliteBibleRepository.open();
-    final translations = await repository.translations();
-    final displayTranslation = resolveDisplayTranslation(translations);
-    final semanticService = SemanticSearchService(
-      loadAssets: () => _loadSemanticComponents(repository, translations),
-    );
-    final matcher = ScriptureMatcher(
-      repository: repository,
-      displayTranslation: displayTranslation,
-      semanticRetriever: semanticService,
-    );
-    final controller = SessionController(
-      audioSource: MicrophoneSource(),
-      transcriptionClient: const DeepgramClient(),
-      matchTranscript: matcher.match,
-    );
-    runApp(
-      JohnMarkApp(
-        home: _RuntimeHome(
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    started.stop();
+    recordPerformance('startup.first_frame', started.elapsed);
+  });
+  runApp(JohnMarkApp(home: RuntimeBootstrapScreen(loadHome: _loadRuntimeHome)));
+}
+
+Future<Widget> _loadRuntimeHome() =>
+    tracePerformance('startup.runtime_ready', () async {
+      BibleRepository? repository;
+      SemanticSearchService? semanticService;
+      try {
+        repository = await SqliteBibleRepository.open();
+        final translations = await repository.translations();
+        final displayTranslation = resolveDisplayTranslation(translations);
+        semanticService = SemanticSearchService(
+          loadAssets: () => _loadSemanticComponents(repository!, translations),
+        );
+        final matcher = ScriptureMatcher(
+          repository: repository,
+          displayTranslation: displayTranslation,
+          semanticRetriever: semanticService,
+        );
+        final controller = SessionController(
+          audioSource: MicrophoneSource(),
+          transcriptionClient: const DeepgramClient(),
+          matchTranscript: matcher.match,
+        );
+        unawaited(semanticService.initialize());
+        return _RuntimeHome(
           controller: controller,
           repository: repository,
           semanticService: semanticService,
           displayTranslation: displayTranslation,
           serviceConfigured: const String.fromEnvironment('DEEPGRAM_API_KEY')
               .isNotEmpty,
-        ),
-      ),
-    );
-    unawaited(semanticService.initialize());
-  } catch (_) {
-    runApp(const JohnMarkApp(home: _MissingBibleScreen()));
-  }
-}
+        );
+      } catch (_) {
+        semanticService?.dispose();
+        await repository?.close();
+        rethrow;
+      }
+    });
 
 Future<SemanticComponents> _loadSemanticComponents(
   BibleRepository repository,
@@ -72,12 +84,17 @@ Future<SemanticComponents> _loadSemanticComponents(
     expectedBibleFingerprint: fingerprint,
     expectedTranslationIds: translations.map((translation) => translation.id),
   );
-  final tokenizer = await BgeTokenizer.fromAsset('assets/semantic/vocab.txt');
-  final embedder = await OnnxTextEmbedder.load(
-    tokenizer: tokenizer,
-    dimensions: dimensions,
-  );
-  return SemanticComponents(embedder: embedder, index: index);
+  try {
+    final tokenizer = await BgeTokenizer.fromAsset('assets/semantic/vocab.txt');
+    final embedder = await OnnxTextEmbedder.load(
+      tokenizer: tokenizer,
+      dimensions: dimensions,
+    );
+    return SemanticComponents(embedder: embedder, index: index);
+  } catch (_) {
+    await index.dispose();
+    rethrow;
+  }
 }
 
 class _RuntimeHome extends StatefulWidget {
@@ -116,44 +133,4 @@ class _RuntimeHomeState extends State<_RuntimeHome> {
     semanticStatus: widget.semanticService,
     serviceConfigured: widget.serviceConfigured,
   );
-}
-
-class _MissingBibleScreen extends StatelessWidget {
-  const _MissingBibleScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('John Mark')),
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Semantics(
-              container: true,
-              label: 'Bible database unavailable',
-              child: const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.menu_book_outlined, size: 48),
-                  SizedBox(height: 20),
-                  Text(
-                    'Bible database unavailable',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                  ),
-                  SizedBox(height: 12),
-                  SelectableText(
-                    'Build the bundled database before running the app:\n\n'
-                    'dart run tool/build_bibles.dart <inputs> --output assets/bibles.db',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

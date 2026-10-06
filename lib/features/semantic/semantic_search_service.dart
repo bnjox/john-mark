@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/performance_trace.dart';
 import 'onnx_text_embedder.dart';
 import 'semantic_retriever.dart';
 
@@ -104,11 +105,10 @@ class SemanticSearchService extends ChangeNotifier
         request.complete(const []);
         return;
       }
-      final embedding = await components.embedder.embed(request.text);
-      final hits = await components.index.search(
-        embedding,
-        limit: request.limit,
-      );
+      final hits = await tracePerformance('search.semantic', () async {
+        final embedding = await components.embedder.embed(request.text);
+        return components.index.search(embedding, limit: request.limit);
+      });
       request.complete(_disposed ? const [] : hits);
     } catch (error) {
       request.complete(const []);

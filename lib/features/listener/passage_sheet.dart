@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/models.dart';
 import '../bible/bible_repository.dart';
 
-class PassageSheet extends StatelessWidget {
+class PassageSheet extends StatefulWidget {
   const PassageSheet({
     required this.repository,
     required this.translationId,
@@ -16,6 +16,38 @@ class PassageSheet extends StatelessWidget {
   final Passage passage;
 
   @override
+  State<PassageSheet> createState() => _PassageSheetState();
+}
+
+class _PassageSheetState extends State<PassageSheet> {
+  late Future<Passage?> _context;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContext();
+  }
+
+  @override
+  void didUpdateWidget(covariant PassageSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository ||
+        oldWidget.translationId != widget.translationId ||
+        oldWidget.passage.reference != widget.passage.reference) {
+      _loadContext();
+    }
+  }
+
+  void _loadContext() {
+    _context = widget.repository.context(
+      widget.translationId,
+      widget.passage.reference,
+      before: 1,
+      after: 1,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
@@ -25,12 +57,7 @@ class PassageSheet extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
           child: FutureBuilder<Passage?>(
-            future: repository.context(
-              translationId,
-              passage.reference,
-              before: 1,
-              after: 1,
-            ),
+            future: _context,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const SizedBox(
@@ -38,7 +65,7 @@ class PassageSheet extends StatelessWidget {
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
-              final contextPassage = snapshot.data ?? passage;
+              final contextPassage = snapshot.data ?? widget.passage;
               return SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

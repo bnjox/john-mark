@@ -105,16 +105,13 @@ class _ListenerScreenState extends State<ListenerScreen>
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.controller.state;
     return Scaffold(
       appBar: AppBar(title: const Text('John Mark'), centerTitle: false),
       body: SafeArea(
         top: false,
-        child: ListenableBuilder(
-          listenable: widget.controller,
-          builder: (context, _) {
-            final state = widget.controller.state;
-            if (!_isActive(state.phase)) {
-              return ValueListenableBuilder<SemanticStatus>(
+        child: !_isActive(state.phase)
+            ? ValueListenableBuilder<SemanticStatus>(
                 valueListenable: widget.semanticStatus,
                 builder: (context, semanticStatus, _) => _ReadyView(
                   state: state,
@@ -123,18 +120,15 @@ class _ListenerScreenState extends State<ListenerScreen>
                   serviceConfigured: widget.serviceConfigured,
                   onStart: widget.controller.start,
                 ),
-              );
-            }
-            return _ListeningView(
-              state: state,
-              displayTranslation: widget.displayTranslation,
-              promoted: _promoted,
-              onPromote: (candidate) => setState(() => _promoted = candidate),
-              onFeaturedTap: _showContext,
-              onStop: widget.controller.stop,
-            );
-          },
-        ),
+              )
+            : _ListeningView(
+                state: state,
+                displayTranslation: widget.displayTranslation,
+                promoted: _promoted,
+                onPromote: (candidate) => setState(() => _promoted = candidate),
+                onFeaturedTap: _showContext,
+                onStop: widget.controller.stop,
+              ),
       ),
     );
   }

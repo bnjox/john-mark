@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/models.dart';
+import '../../core/performance_trace.dart';
 import '../transcription/transcription.dart';
 import 'bounded_audio_queue.dart';
 
@@ -380,7 +381,10 @@ class SessionController extends ChangeNotifier {
   Future<void> _runMatch(_MatchWork work, String finalizedText) async {
     work.inFlight = true;
     try {
-      final match = await matchTranscript(finalizedText);
+      final match = await tracePerformance(
+        'search.finalized_to_match',
+        () => matchTranscript(finalizedText),
+      );
       if (identical(_matchWork, work) &&
           _isCurrent(work.generation) &&
           work.pendingText == null &&
