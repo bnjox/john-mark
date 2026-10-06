@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../lib/features/bible/corpus_manifest.dart';
 import 'fsb_parser.dart';
 import 'model.dart';
 import 'xml_parser.dart';
@@ -11,24 +13,26 @@ class BuiltTranslation {
   const BuiltTranslation({
     required this.id,
     required this.name,
-    required this.passageCount,
+    required this.verseCount,
   });
 
   final String id;
   final String name;
-  final int passageCount;
+  final int verseCount;
 }
 
 class BibleBuildResult {
   const BibleBuildResult({
     required this.outputPath,
+    required this.manifestPath,
     required this.translations,
-    required this.passageCount,
+    required this.verseCount,
   });
 
   final String outputPath;
+  final String manifestPath;
   final List<BuiltTranslation> translations;
-  final int passageCount;
+  final int verseCount;
 }
 
 class BibleBuilder {
@@ -56,32 +60,41 @@ class BibleBuilder {
       parsed.add(_ParsedBible(id, bible));
     }
     parsed.sort((left, right) => left.id.compareTo(right.id));
+    final fingerprint = fingerprintCorpus(_fingerprintVerses(parsed));
 
     final output = File(outputPath).absolute;
+    final manifestOutput = File(
+      path.join(
+        output.parent.path,
+        '${path.basenameWithoutExtension(output.path)}.manifest.json',
+      ),
+    );
     await output.parent.create(recursive: true);
     final temporary = File(
       '${output.path}.tmp-${DateTime.now().microsecondsSinceEpoch}-$pid',
     );
+    final temporaryManifest = File('${temporary.path}.manifest.json');
     Database? database;
     try {
       database = sqlite3.open(temporary.path);
       _createSchema(database);
       database.execute('BEGIN IMMEDIATE');
       final builtTranslations = <BuiltTranslation>[];
-      var totalPassages = 0;
+      var totalVerses = 0;
       try {
+        _insertMetadata(database, fingerprint);
         for (final item in parsed) {
           final count = _insertBible(database, item.id, item.bible);
-          totalPassages += count;
+          totalVerses += count;
           builtTranslations.add(
             BuiltTranslation(
               id: item.id,
               name: item.bible.name,
-              passageCount: count,
+              verseCount: count,
             ),
           );
         }
-        database.execute('PRAGMA user_version = 2');
+        database.execute('PRAGMA user_version = $corpusSchemaVersion');
         database.execute('COMMIT');
       } catch (_) {
         database.execute('ROLLBACK');
@@ -91,16 +104,30 @@ class BibleBuilder {
       database.close();
       database = null;
 
+      final assetId = (await sha256.bind(temporary.openRead()).first)
+          .toString();
+      final manifest = CorpusManifest(
+        assetId: assetId,
+        databaseBytes: await temporary.length(),
+        translationIds: parsed.map((item) => item.id).toList(growable: false),
+        corpusFingerprint: fingerprint,
+      );
+      await temporaryManifest.writeAsString(manifest.encode(), flush: true);
       await temporary.rename(output.path);
+      await temporaryManifest.rename(manifestOutput.path);
       return BibleBuildResult(
         outputPath: output.path,
+        manifestPath: manifestOutput.path,
         translations: builtTranslations,
-        passageCount: totalPassages,
+        verseCount: totalVerses,
       );
     } finally {
       database?.close();
       if (await temporary.exists()) {
         await temporary.delete();
+      }
+      if (await temporaryManifest.exists()) {
+        await temporaryManifest.delete();
       }
     }
   }
@@ -134,42 +161,42 @@ class _ParsedBible {
 
 void _createSchema(Database database) {
   database.execute('''
+    CREATE TABLE metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    ) WITHOUT ROWID;
     CREATE TABLE translations (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL
-    );
+    ) WITHOUT ROWID;
     CREATE TABLE books (
       translation_id TEXT NOT NULL,
       number INTEGER NOT NULL,
       name TEXT NOT NULL,
       PRIMARY KEY (translation_id, number)
-    );
-    CREATE TABLE passages (
-      id INTEGER PRIMARY KEY,
+    ) WITHOUT ROWID;
+    CREATE TABLE verses (
       translation_id TEXT NOT NULL,
       book_number INTEGER NOT NULL,
       chapter INTEGER NOT NULL,
-      start_verse INTEGER NOT NULL,
-      end_verse INTEGER NOT NULL,
-      label TEXT NOT NULL,
+      verse INTEGER NOT NULL,
       display_text TEXT NOT NULL,
-      UNIQUE (
-        translation_id,
-        book_number,
-        chapter,
-        start_verse,
-        end_verse
-      )
-    );
-    CREATE INDEX passage_reference_lookup
-      ON passages(
-        translation_id,
-        book_number,
-        chapter,
-        start_verse,
-        end_verse
-      );
+      PRIMARY KEY (translation_id, book_number, chapter, verse)
+    ) WITHOUT ROWID;
   ''');
+}
+
+void _insertMetadata(Database database, String fingerprint) {
+  for (final entry in {
+    'schema_version': '$corpusSchemaVersion',
+    'fingerprint_contract': '$corpusFingerprintContract',
+    'corpus_fingerprint': fingerprint,
+  }.entries) {
+    database.execute('INSERT INTO metadata (key, value) VALUES (?, ?)', [
+      entry.key,
+      entry.value,
+    ]);
+  }
 }
 
 int _insertBible(Database database, String id, SourceBible bible) {
@@ -179,7 +206,7 @@ int _insertBible(Database database, String id, SourceBible bible) {
   ]);
   final books = [...bible.books]
     ..sort((left, right) => left.number.compareTo(right.number));
-  var passageCount = 0;
+  var verseCount = 0;
   for (final book in books) {
     database.execute(
       'INSERT INTO books (translation_id, number, name) VALUES (?, ?, ?)',
@@ -190,70 +217,54 @@ int _insertBible(Database database, String id, SourceBible bible) {
     for (final chapter in chapters) {
       final verses = [...chapter.verses]
         ..sort((left, right) => left.number.compareTo(right.number));
-      for (var start = 0; start < verses.length; start++) {
-        for (var length = 1; length <= 3; length++) {
-          final end = start + length - 1;
-          if (end >= verses.length) break;
-          if (!_isConsecutive(verses, start, end)) break;
-          _insertPassage(
-            database,
-            id,
-            book,
-            chapter.number,
-            verses.sublist(start, end + 1),
+      for (final verse in verses) {
+        _insertVerse(database, id, book.number, chapter.number, verse);
+        verseCount++;
+      }
+    }
+  }
+  return verseCount;
+}
+
+void _insertVerse(
+  Database database,
+  String translationId,
+  int book,
+  int chapter,
+  SourceVerse verse,
+) {
+  database.execute(
+    '''
+      INSERT INTO verses (
+        translation_id,
+        book_number,
+        chapter,
+        verse,
+        display_text
+      ) VALUES (?, ?, ?, ?, ?)
+    ''',
+    [translationId, book, chapter, verse.number, verse.text],
+  );
+}
+
+Iterable<CorpusFingerprintVerse> _fingerprintVerses(
+  List<_ParsedBible> parsed,
+) sync* {
+  for (final item in parsed) {
+    for (final book in item.bible.books) {
+      for (final chapter in book.chapters) {
+        for (final verse in chapter.verses) {
+          yield CorpusFingerprintVerse(
+            translationId: item.id,
+            book: book.number,
+            chapter: chapter.number,
+            verse: verse.number,
+            text: verse.text,
           );
-          passageCount++;
         }
       }
     }
   }
-  return passageCount;
-}
-
-bool _isConsecutive(List<SourceVerse> verses, int start, int end) {
-  for (var index = start + 1; index <= end; index++) {
-    if (verses[index - 1].endNumber + 1 != verses[index].number) {
-      return false;
-    }
-  }
-  return true;
-}
-
-void _insertPassage(
-  Database database,
-  String translationId,
-  SourceBook book,
-  int chapter,
-  List<SourceVerse> verses,
-) {
-  final startVerse = verses.first.number;
-  final endVerse = verses.last.endNumber;
-  final displayText = verses.map((verse) => verse.text).join(' ');
-  final verseLabel = startVerse == endVerse
-      ? '$startVerse'
-      : '$startVerse–$endVerse';
-  database.execute(
-    '''
-      INSERT INTO passages (
-        translation_id,
-        book_number,
-        chapter,
-        start_verse,
-        end_verse,
-        label,
-        display_text
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''',
-    [
-      translationId,
-      book.number,
-      chapter,
-      startVerse,
-      endVerse,
-      '${book.name} $chapter:$verseLabel',
-      displayText,
-    ],
-  );
 }
 
 String _slug(String name) {

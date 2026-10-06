@@ -44,19 +44,18 @@ class IndexToolTests(unittest.TestCase):
         connection = sqlite3.connect(self.database)
         connection.executescript(
             """
-            PRAGMA user_version = 1;
-            CREATE TABLE passages (
+            PRAGMA user_version = 3;
+            CREATE TABLE verses (
               translation_id TEXT, book_number INTEGER, chapter INTEGER,
-              start_verse INTEGER, end_verse INTEGER, display_text TEXT
+              verse INTEGER, display_text TEXT
             );
             """
         )
         connection.executemany(
-            "INSERT INTO passages VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO verses VALUES (?, ?, ?, ?, ?)",
             [
-                ("zeta", 43, 3, 16, 17, "excluded range"),
-                ("zeta", 43, 3, 16, 16, "second"),
-                ("alpha", 1, 1, 1, 1, "first"),
+                ("zeta", 43, 3, 16, "second"),
+                ("alpha", 1, 1, 1, "first"),
             ],
         )
         connection.commit()
@@ -96,7 +95,7 @@ class IndexToolTests(unittest.TestCase):
 
     def test_rejects_wrong_schema_without_replacing_output(self) -> None:
         connection = sqlite3.connect(self.database)
-        connection.execute("PRAGMA user_version = 2")
+        connection.execute("PRAGMA user_version = 4")
         connection.close()
         output = self.root / "index.bin"
         output.write_bytes(b"keep")

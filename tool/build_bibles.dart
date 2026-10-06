@@ -27,15 +27,14 @@ Future<void> main(List<String> arguments) async {
       output,
     );
     for (final translation in result.translations) {
-      stdout.writeln(
-        '${translation.name}: ${translation.passageCount} passages',
-      );
+      stdout.writeln('${translation.name}: ${translation.verseCount} verses');
     }
     stdout.writeln(
       '${result.translations.length} translations, '
-      '${result.passageCount} passages',
+      '${result.verseCount} verses',
     );
     stdout.writeln('Output: ${result.outputPath}');
+    stdout.writeln('Manifest: ${result.manifestPath}');
   } on FormatException catch (error) {
     stderr.writeln(error.message);
     exitCode = 65;

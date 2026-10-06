@@ -33,14 +33,13 @@ def read_verses(database: Path) -> list[Verse]:
     connection = sqlite3.connect(database)
     try:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        if version != 1:
+        if version != 3:
             raise ValueError(f"unsupported Bible schema version: {version}")
         rows = connection.execute(
             """
-            SELECT translation_id, book_number, chapter, start_verse, display_text
-            FROM passages
-            WHERE start_verse = end_verse
-            ORDER BY translation_id, book_number, chapter, start_verse
+            SELECT translation_id, book_number, chapter, verse, display_text
+            FROM verses
+            ORDER BY translation_id, book_number, chapter, verse
             """
         ).fetchall()
     finally:
@@ -48,10 +47,10 @@ def read_verses(database: Path) -> list[Verse]:
     return [Verse(str(row[0]), int(row[1]), int(row[2]), int(row[3]), str(row[4])) for row in rows]
 
 
-def bible_fingerprint(verses: Iterable[Verse], schema_version: int = 1) -> str:
+def bible_fingerprint(verses: Iterable[Verse], contract_version: int = 1) -> str:
     """Hash schema and sorted verse fields using u32-LE length-prefixed UTF-8."""
     digest = hashlib.sha256()
-    _hash_field(digest, str(schema_version))
+    _hash_field(digest, str(contract_version))
     for item in sorted(verses, key=lambda v: (v.translation_id, v.book, v.chapter, v.verse)):
         for value in (
             item.translation_id,

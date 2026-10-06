@@ -26,7 +26,7 @@ void main() {
     return file;
   }
 
-  test('builds deterministic translations and passages', () async {
+  test('builds a deterministic compact verse corpus and manifest', () async {
     final output = '${temporaryDirectory.path}/bibles.db';
     final result = await BibleBuilder().build([
       File('test/fixtures/bibles/minimal.fsb'),
@@ -37,41 +37,84 @@ void main() {
       'fictional-fsb',
       'fictional-xml',
     ]);
-    expect(result.passageCount, greaterThan(6));
+    expect(result.verseCount, 6);
 
     final database = sqlite3.open(output, mode: OpenMode.readOnly);
     addTearDown(database.close);
-    expect(database.userVersion, 2);
+    expect(database.userVersion, 3);
     expect(database.select('SELECT id, name FROM translations ORDER BY id'), [
       {'id': 'fictional-fsb', 'name': 'Fictional FSB'},
       {'id': 'fictional-xml', 'name': 'Fictional XML'},
     ]);
     expect(
-      database.select('SELECT COUNT(*) AS count FROM passages').first['count'],
-      12,
+      database.select('SELECT COUNT(*) AS count FROM verses').first['count'],
+      6,
     );
     expect(
       database.select(
-        'SELECT label, display_text FROM passages '
-        'WHERE translation_id = ? AND start_verse = 15 AND end_verse = 17',
+        'SELECT verse, display_text FROM verses '
+        'WHERE translation_id = ? ORDER BY verse',
         ['fictional-fsb'],
-      ).single,
-      {
-        'label': 'John 3:15–17',
-        'display_text':
-            'Everyone who trusts the promised light may share lasting life. '
-            'The Maker cherished the world and offered the beloved Son. '
-            'The Son came to restore the world, not to condemn it.',
-      },
+      ),
+      [
+        {
+          'verse': 15,
+          'display_text':
+              'Everyone who trusts the promised light may share lasting life.',
+        },
+        {
+          'verse': 16,
+          'display_text':
+              'The Maker cherished the world and offered the beloved Son.',
+        },
+        {
+          'verse': 17,
+          'display_text':
+              'The Son came to restore the world, not to condemn it.',
+        },
+      ],
     );
+    expect(
+      database
+          .select(
+            "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
+          )
+          .map((row) => row['name']),
+      ['books', 'metadata', 'translations', 'verses'],
+    );
+    expect(
+      database.select('SELECT key, value FROM metadata ORDER BY key'),
+      containsAll([
+        {'key': 'fingerprint_contract', 'value': '1'},
+        {'key': 'schema_version', 'value': '3'},
+      ]),
+    );
+    final manifest = jsonDecode(await File(result.manifestPath).readAsString());
+    expect(manifest, {
+      'formatVersion': 1,
+      'schemaVersion': 3,
+      'assetId': isA<String>().having((value) => value.length, 'length', 64),
+      'databaseBytes': greaterThan(0),
+      'translationIds': ['fictional-fsb', 'fictional-xml'],
+      'fingerprintContract': 1,
+      'corpusFingerprint': isA<String>().having(
+        (value) => value.length,
+        'length',
+        64,
+      ),
+    });
     final secondOutput = '${temporaryDirectory.path}/second.db';
-    await BibleBuilder().build([
+    final secondResult = await BibleBuilder().build([
       File('test/fixtures/bibles/minimal.fsb'),
       File('test/fixtures/bibles/minimal-zefania.xml'),
     ], secondOutput);
     expect(
       await File(secondOutput).readAsBytes(),
       await File(output).readAsBytes(),
+    );
+    expect(
+      await File(secondResult.manifestPath).readAsBytes(),
+      await File(result.manifestPath).readAsBytes(),
     );
   });
 
@@ -145,8 +188,8 @@ void main() {
     addTearDown(database.close);
     expect(
       database
-          .select('SELECT start_verse FROM passages ORDER BY start_verse')
-          .map((row) => row['start_verse']),
+          .select('SELECT verse FROM verses ORDER BY verse')
+          .map((row) => row['verse']),
       [15, 17],
     );
   });
