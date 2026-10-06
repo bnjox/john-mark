@@ -62,17 +62,14 @@ Future<SemanticComponents> _loadSemanticComponents(
   const modelId = 'BAAI/bge-base-en-v1.5';
   const modelRevision = 'a5beb1e3e68b9ab74eb54cfd186867f64f240e1a';
   const dimensions = 768;
-  final results = await Future.wait<Object>([
-    rootBundle.load('assets/semantic/scripture_embeddings.bin'),
-    repository.fingerprint(),
-  ]);
-  final data = results[0] as ByteData;
-  final index = SemanticIndex.parse(
-    data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+  final fingerprint = await repository.fingerprint();
+  final index = await SemanticIndex.loadAsset(
+    'assets/semantic/scripture_embeddings.bin',
+    rootIsolateToken: RootIsolateToken.instance!,
     expectedModelId: modelId,
     expectedModelRevision: modelRevision,
     expectedDimensions: dimensions,
-    expectedBibleFingerprint: results[1] as String,
+    expectedBibleFingerprint: fingerprint,
     expectedTranslationIds: translations.map((translation) => translation.id),
   );
   final tokenizer = await BgeTokenizer.fromAsset('assets/semantic/vocab.txt');
