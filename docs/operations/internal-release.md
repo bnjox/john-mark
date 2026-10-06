@@ -38,12 +38,13 @@ Bible generation, and index generation are owner-run release steps:
 
 ```bash
 uv run tool/test_semantic_tools.py
-dart run tool/build_bibles.dart private/bibles/NKJV.fsb private/bibles/KJV.xml --output assets/bibles.db
+dart run tool/build_bibles.dart private/bibles/KJV.fsb private/bibles/NIV.fsb private/bibles/NKJV.fsb private/bibles/NLT.fsb --output assets/bibles.db
 uv run tool/fetch_semantic_model.py
 uv run tool/build_semantic_index.py --database assets/bibles.db --model private/models/bge-base-en-v1.5 --output assets/semantic/scripture_embeddings.bin
-dart format --output=none --set-exit-if-changed tool lib test
+dart format --output=none --set-exit-if-changed tool lib test integration_test test_driver
 flutter test
 flutter analyze
+flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/semantic_performance_test.dart -d <android-device-id>
 flutter build apk --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 flutter build ios --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 ```
@@ -52,11 +53,13 @@ Measure semantic quality and runtime behavior in profile mode on representative
 Android and iPhone devices. Never copy transcript or verse text into release
 notes, logs, tickets, or CI output.
 
-Confirm `private/models/`, `assets/bibles.db`, and generated files under
-`assets/semantic/` remain ignored and unstaged. The model fetch verifies a
-pinned BGE-base-en-v1.5 revision and stages its upstream README with the runtime
-assets. Review the BGE model card's MIT attribution and distribution terms for
-the exact release; do not remove the bundled attribution.
+Confirm `private/models/`, `assets/bibles.db`,
+`assets/bibles.manifest.json`, and generated files under `assets/semantic/`
+remain ignored and unstaged. Keep the generated database and manifest together
+in the release workspace. The model fetch verifies a pinned BGE-base-en-v1.5
+revision and stages its upstream README with the runtime assets. Review the BGE
+model card's MIT attribution and distribution terms for the exact release; do
+not remove the bundled attribution.
 
 The Android APK is written to `build/app/outputs/flutter-apk/app-release.apk`.
 The unsigned/locally signed iOS application is under `build/ios/iphoneos/`;

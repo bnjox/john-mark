@@ -35,10 +35,10 @@ model, tokenizer, and semantic index are build assets, not session history.
 - Legally licensed Bible source files under `private/bibles/`
 - A restricted Deepgram key in the `DEEPGRAM_API_KEY` environment variable
 
-Private inputs, `assets/bibles.db`, environment files, and credentials are
-ignored by Git. A key supplied with `--dart-define` remains extractable from a
-compiled mobile binary; internal distribution accepts that risk and rotation
-requires a newly built and redistributed app.
+Private inputs, `assets/bibles.db`, its generated manifest, environment files,
+and credentials are ignored by Git. A key supplied with `--dart-define` remains
+extractable from a compiled mobile binary; internal distribution accepts that
+risk and rotation requires a newly built and redistributed app.
 
 ## Local setup
 
@@ -68,7 +68,7 @@ and generate its matching semantic index:
 ```bash
 flutter pub get
 uv run tool/test_semantic_tools.py
-dart run tool/build_bibles.dart private/bibles/NKJV.fsb private/bibles/KJV.xml --output assets/bibles.db
+dart run tool/build_bibles.dart private/bibles/KJV.fsb private/bibles/NIV.fsb private/bibles/NKJV.fsb private/bibles/NLT.fsb --output assets/bibles.db
 uv run tool/fetch_semantic_model.py
 uv run tool/build_semantic_index.py --database assets/bibles.db --model private/models/bge-base-en-v1.5 --output assets/semantic/scripture_embeddings.bin
 ```
@@ -95,15 +95,21 @@ and builds require macOS, Xcode, and configured signing.
 After loading `.env` as above:
 
 ```bash
+dart format --output=none --set-exit-if-changed tool lib test integration_test test_driver
 flutter test
 flutter analyze
+flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/semantic_performance_test.dart -d <android-device-id>
 flutter build apk --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 flutter build ios --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 ```
 
-Evaluate semantic quality, cold start, latency, memory, battery, and thermal
-behavior in owner-run mobile profile sessions on representative Android and
-iPhone devices because the ONNX runtime executes on-device.
+The corpus builder emits `assets/bibles.manifest.json` beside the compact
+database. Keep both files together: the app uses the manifest to avoid copying
+and validating an unchanged database on every launch. The profile integration
+test measures exact BGE inference plus exhaustive index search on the selected
+physical Android device. Also evaluate semantic quality, cold start, memory,
+battery, and thermal behavior in owner-run profile sessions on representative
+Android and iPhone devices because the ONNX runtime executes on-device.
 
 Audio delivery awaits one `dart:io` WebSocket `addStream` call per frame. This
 bounds the controller to one in-flight transport write plus its 64-frame queue;

@@ -15,12 +15,13 @@ key, Bible source, or generated database content.
 
 ## Automated gates
 
-- [ ] `dart format --output=none --set-exit-if-changed tool lib test` passes.
+- [ ] `dart format --output=none --set-exit-if-changed tool lib test integration_test test_driver` passes.
 - [ ] `flutter test` passes.
 - [ ] `flutter analyze` passes.
-- [ ] Private Bible files, fixtures, `assets/bibles.db`, credentials, and
-      signing material are absent from the Git diff and release logs; generated
-      model and semantic-index assets are ignored and unstaged.
+- [ ] Private Bible files, fixtures, `assets/bibles.db`, its generated manifest,
+      credentials, and signing material are absent from the Git diff and
+      release logs; generated model and semantic-index assets are ignored and
+      unstaged.
 - [ ] The pinned semantic model and generated index validate against the release
       Bible fingerprint, model revision, dimensions, and translation set.
 - [ ] Evaluation used representative private fixtures and the release Bible
@@ -86,6 +87,10 @@ platform.
 - [ ] Profile measurements record semantic cold initialization, p50/p95 search
       latency, and peak memory on both representative devices without private
       text or vectors.
+- [ ] Normal cold process launch reaches the usable ready screen at p95 within
+      two seconds; a fresh or changed corpus is ready within five seconds.
+- [ ] Exact semantic search is at most five seconds, with p50 within two seconds
+      and p95 within four seconds, on the acceptance Android device.
 - [ ] Stop and background leave no persisted sermon audio, transcript, detected
       passage history, or session history.
 - [ ] Device logs, crash output, and network diagnostics contain no sermon

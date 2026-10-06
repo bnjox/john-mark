@@ -88,8 +88,9 @@ class SemanticIndex implements SemanticVectorIndex {
       }
     });
     final workerConfig = config.withEvents(events.sendPort);
-    final isolate = await Isolate.spawn(_runWorker, workerConfig);
+    Isolate? isolate;
     try {
+      isolate = await Isolate.spawn(_runWorker, workerConfig);
       final worker = await ready.future;
       return SemanticIndex._(
         config.expectedDimensions,
@@ -101,7 +102,7 @@ class SemanticIndex implements SemanticVectorIndex {
       );
     } catch (_) {
       disposed = true;
-      isolate.kill(priority: Isolate.immediate);
+      isolate?.kill(priority: Isolate.immediate);
       await subscription.cancel();
       events.close();
       rethrow;
