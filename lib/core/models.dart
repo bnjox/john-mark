@@ -62,13 +62,11 @@ class MatchCandidate {
     required this.passage,
     required this.score,
     required this.band,
-    required this.explicitReference,
   });
 
   final Passage passage;
   final double score;
   final ConfidenceBand band;
-  final bool explicitReference;
 }
 
 class MatchUpdate {

@@ -26,67 +26,54 @@ void main() {
     return file;
   }
 
-  test(
-    'builds deterministic translations, passages, and lexical tokens',
-    () async {
-      final output = '${temporaryDirectory.path}/bibles.db';
-      final result = await BibleBuilder().build([
-        File('test/fixtures/bibles/minimal.fsb'),
-        File('test/fixtures/bibles/minimal-zefania.xml'),
-      ], output);
+  test('builds deterministic translations and passages', () async {
+    final output = '${temporaryDirectory.path}/bibles.db';
+    final result = await BibleBuilder().build([
+      File('test/fixtures/bibles/minimal.fsb'),
+      File('test/fixtures/bibles/minimal-zefania.xml'),
+    ], output);
 
-      expect(result.translations.map((translation) => translation.id), [
-        'fictional-fsb',
-        'fictional-xml',
-      ]);
-      expect(result.passageCount, greaterThan(6));
+    expect(result.translations.map((translation) => translation.id), [
+      'fictional-fsb',
+      'fictional-xml',
+    ]);
+    expect(result.passageCount, greaterThan(6));
 
-      final database = sqlite3.open(output, mode: OpenMode.readOnly);
-      addTearDown(database.close);
-      expect(database.userVersion, 1);
-      expect(database.select('SELECT id, name FROM translations ORDER BY id'), [
-        {'id': 'fictional-fsb', 'name': 'Fictional FSB'},
-        {'id': 'fictional-xml', 'name': 'Fictional XML'},
-      ]);
-      expect(
-        database
-            .select('SELECT COUNT(*) AS count FROM passages')
-            .first['count'],
-        12,
-      );
-      expect(
-        database.select(
-          'SELECT label, display_text FROM passages '
-          'WHERE translation_id = ? AND start_verse = 15 AND end_verse = 17',
-          ['fictional-fsb'],
-        ).single,
-        {
-          'label': 'John 3:15–17',
-          'display_text':
-              'Everyone who trusts the promised light may share lasting life. '
-              'The Maker cherished the world and offered the beloved Son. '
-              'The Son came to restore the world, not to condemn it.',
-        },
-      );
-      expect(
-        database.select(
-          'SELECT COUNT(*) AS count FROM passage_tokens WHERE token = ?',
-          ['world'],
-        ).first['count'],
-        greaterThan(0),
-      );
-
-      final secondOutput = '${temporaryDirectory.path}/second.db';
-      await BibleBuilder().build([
-        File('test/fixtures/bibles/minimal.fsb'),
-        File('test/fixtures/bibles/minimal-zefania.xml'),
-      ], secondOutput);
-      expect(
-        await File(secondOutput).readAsBytes(),
-        await File(output).readAsBytes(),
-      );
-    },
-  );
+    final database = sqlite3.open(output, mode: OpenMode.readOnly);
+    addTearDown(database.close);
+    expect(database.userVersion, 2);
+    expect(database.select('SELECT id, name FROM translations ORDER BY id'), [
+      {'id': 'fictional-fsb', 'name': 'Fictional FSB'},
+      {'id': 'fictional-xml', 'name': 'Fictional XML'},
+    ]);
+    expect(
+      database.select('SELECT COUNT(*) AS count FROM passages').first['count'],
+      12,
+    );
+    expect(
+      database.select(
+        'SELECT label, display_text FROM passages '
+        'WHERE translation_id = ? AND start_verse = 15 AND end_verse = 17',
+        ['fictional-fsb'],
+      ).single,
+      {
+        'label': 'John 3:15–17',
+        'display_text':
+            'Everyone who trusts the promised light may share lasting life. '
+            'The Maker cherished the world and offered the beloved Son. '
+            'The Son came to restore the world, not to condemn it.',
+      },
+    );
+    final secondOutput = '${temporaryDirectory.path}/second.db';
+    await BibleBuilder().build([
+      File('test/fixtures/bibles/minimal.fsb'),
+      File('test/fixtures/bibles/minimal-zefania.xml'),
+    ], secondOutput);
+    expect(
+      await File(secondOutput).readAsBytes(),
+      await File(output).readAsBytes(),
+    );
+  });
 
   test('rejects a non-canonical FSB book with source location', () async {
     final source = await writeJson('bad-book.fsb', {

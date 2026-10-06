@@ -60,11 +60,10 @@ platform.
 - [ ] With NKJV absent, the deterministic fallback translation is named and is
       used consistently for results and context.
 - [ ] Representative explicit references resolve correctly.
-- [ ] Representative close quotations produce useful top-one/top-four results.
-- [ ] Representative differently worded quotations/paraphrases resolve only
-      when semantic threshold, winner margin, and repeated support are met.
-- [ ] Missing, stale, and invalid semantic assets leave explicit-reference and
-      cross-translation quotation matching usable.
+- [ ] Representative quotations and paraphrases produce useful top-one/top-four
+      semantic results only when scores meet the configured threshold.
+- [ ] Missing, stale, and invalid semantic assets leave explicit-reference
+      matching usable.
 - [ ] Unrelated sermon speech does not force a scripture result.
 - [ ] The featured result and alternatives never exceed one plus three.
 - [ ] Stop remains prompt during active semantic inference, and a late semantic

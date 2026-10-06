@@ -141,85 +141,6 @@ class SqliteBibleRepository implements BibleRepository {
   }
 
   @override
-  Future<List<Passage>> quoteCandidates(
-    String translationId,
-    List<String> tokens, {
-    int limit = 40,
-  }) async {
-    if (limit <= 0) return const [];
-    final distinctTokens = tokens
-        .map((token) => token.trim().toLowerCase())
-        .where((token) => RegExp(r'^[a-z0-9]+$').hasMatch(token))
-        .toSet()
-        .take(64)
-        .toList(growable: false);
-    if (distinctTokens.isEmpty) return const [];
-    final placeholders = List.filled(distinctTokens.length, '?').join(', ');
-    final rows = await _database.rawQuery(
-      '''
-      SELECT p.*, b.name AS book_name,
-        COUNT(DISTINCT t.token) AS token_hits
-      FROM passage_tokens t
-      JOIN passages p ON p.id = t.passage_id
-      JOIN books b
-        ON b.translation_id = p.translation_id
-        AND b.number = p.book_number
-      WHERE p.translation_id = ?
-        AND t.token IN ($placeholders)
-      GROUP BY p.id
-      ORDER BY token_hits DESC, p.id ASC
-      LIMIT ?
-    ''',
-      [translationId, ...distinctTokens, limit.clamp(1, 40)],
-    );
-    return rows.map(_passageFromRow).toList(growable: false);
-  }
-
-  @override
-  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
-    List<String> tokens, {
-    int limitPerTranslation = 40,
-  }) async {
-    if (limitPerTranslation <= 0) return const [];
-    final distinctTokens = _boundedTokens(tokens);
-    if (distinctTokens.isEmpty) return const [];
-    final placeholders = List.filled(distinctTokens.length, '?').join(', ');
-    final rows = await _database.rawQuery(
-      '''
-        WITH ranked AS (
-          SELECT p.*, b.name AS book_name,
-            COUNT(DISTINCT t.token) AS token_hits,
-            ROW_NUMBER() OVER (
-              PARTITION BY p.translation_id
-              ORDER BY COUNT(DISTINCT t.token) DESC,
-                p.book_number, p.chapter, p.start_verse, p.end_verse, p.id
-            ) AS translation_rank
-          FROM passage_tokens t
-          JOIN passages p ON p.id = t.passage_id
-          JOIN books b
-            ON b.translation_id = p.translation_id
-            AND b.number = p.book_number
-          WHERE t.token IN ($placeholders)
-          GROUP BY p.id
-        )
-        SELECT * FROM ranked
-        WHERE translation_rank <= ?
-        ORDER BY translation_id COLLATE NOCASE, translation_id,
-          translation_rank, book_number, chapter, start_verse, end_verse, id
-      ''',
-      [...distinctTokens, limitPerTranslation.clamp(1, 40)],
-    );
-    return rows
-        .map(
-          (row) => SourcedPassage(
-            translationId: row['translation_id']! as String,
-            passage: _passageFromRow(row),
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  @override
   Future<String> fingerprint() async {
     final versionRows = await _database.rawQuery('PRAGMA user_version');
     final schemaVersion = versionRows.single.values.single! as int;
@@ -279,13 +200,6 @@ class SqliteBibleRepository implements BibleRepository {
     );
   }
 }
-
-List<String> _boundedTokens(List<String> tokens) => tokens
-    .map((token) => token.trim().toLowerCase())
-    .where((token) => RegExp(r'^[a-z0-9]+$').hasMatch(token))
-    .toSet()
-    .take(64)
-    .toList(growable: false);
 
 Uint8List _lengthPrefixed(String value) {
   final valueBytes = utf8.encode(value);

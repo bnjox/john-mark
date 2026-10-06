@@ -100,6 +100,49 @@ void main() {
     expect(fixture.controller.state.matches.featured, isNull);
   });
 
+  test('a completed match is ignored when newer speech is pending', () async {
+    final firstResult = Completer<MatchUpdate?>();
+    final secondResult = Completer<MatchUpdate?>();
+    final matchedText = <String>[];
+    final fixture = _Fixture(
+      matcher: (text) {
+        matchedText.add(text);
+        return matchedText.length == 1
+            ? firstResult.future
+            : secondResult.future;
+      },
+    );
+    await fixture.controller.start();
+    final events = fixture.client.connections.single.eventsController;
+    events.add(
+      const TranscriptionEvent(
+        type: TranscriptionEventType.finalized,
+        text: 'old paraphrase',
+        eventId: 'old',
+      ),
+    );
+    await _flush();
+    events.add(
+      const TranscriptionEvent(
+        type: TranscriptionEventType.finalized,
+        text: 'new paraphrase',
+        eventId: 'new',
+      ),
+    );
+    await _flush();
+
+    firstResult.complete(_match);
+    await _flush();
+
+    expect(matchedText, ['old paraphrase', 'old paraphrase\nnew paraphrase']);
+    expect(fixture.controller.state.matches.featured, isNull);
+
+    secondResult.complete(_match);
+    await _flush();
+    expect(fixture.controller.state.matches.featured, _match.featured);
+    await fixture.controller.stop();
+  });
+
   test(
     'awaits one send while retaining only the newest 64 queued frames',
     () async {
@@ -279,17 +322,7 @@ void main() {
     expect(fixture.audio.stopCount, 1);
   });
 
-  test('resets matcher state at start and stop boundaries', () async {
-    var resets = 0;
-    final fixture = _Fixture(resetMatcher: () => resets++);
-
-    await fixture.controller.start();
-    expect(resets, 1);
-    await fixture.controller.stop();
-    expect(resets, 2);
-  });
-
-  test('repeated final IDs append and match once', () async {
+  test('repeated final IDs display and match once', () async {
     var matches = 0;
     final fixture = _Fixture(
       matcher: (_) async {
@@ -314,37 +347,94 @@ void main() {
     await fixture.controller.stop();
   });
 
-  test('finalized and interim transcript text stays bounded', () async {
-    final fixture = _Fixture();
-    await fixture.controller.start();
-    final connection = fixture.client.connections.single;
+  test(
+    'keeps five finalized segments and matches with their context',
+    () async {
+      final matchedText = <String>[];
+      final fixture = _Fixture(
+        matcher: (text) async {
+          matchedText.add(text);
+          return null;
+        },
+      );
+      await fixture.controller.start();
+      final connection = fixture.client.connections.single;
 
-    connection.eventsController.add(
-      TranscriptionEvent(
-        type: TranscriptionEventType.finalized,
-        text: 'a' * 2000,
-        eventId: 'long-final',
-      ),
-    );
-    await _flush();
-    expect(
-      fixture.controller.state.transcript.finalized.length,
-      SessionController.transcriptLimit,
-    );
+      connection.eventsController.add(
+        const TranscriptionEvent(
+          type: TranscriptionEventType.finalized,
+          text: 'the first paraphrase',
+          eventId: 'first',
+        ),
+      );
+      await _flush();
+      connection.eventsController.add(
+        const TranscriptionEvent(
+          type: TranscriptionEventType.finalized,
+          text: 'the second paraphrase',
+          eventId: 'second',
+        ),
+      );
+      await _flush();
 
-    connection.eventsController.add(
-      TranscriptionEvent(
-        type: TranscriptionEventType.interim,
-        text: 'b' * 2000,
-      ),
-    );
-    await _flush();
-    expect(
-      fixture.controller.state.transcript.interim.length,
-      SessionController.transcriptLimit,
-    );
-    await fixture.controller.stop();
-  });
+      expect(
+        fixture.controller.state.transcript.finalized,
+        'the first paraphrase the second paraphrase',
+      );
+      expect(matchedText, [
+        'the first paraphrase',
+        'the first paraphrase\nthe second paraphrase',
+      ]);
+
+      for (final (id, text) in [
+        ('third', 'the third paraphrase'),
+        ('fourth', 'the fourth paraphrase'),
+        ('fifth', 'the fifth paraphrase'),
+        ('sixth', 'the sixth paraphrase'),
+      ]) {
+        connection.eventsController.add(
+          TranscriptionEvent(
+            type: TranscriptionEventType.finalized,
+            text: text,
+            eventId: id,
+          ),
+        );
+        await _flush();
+      }
+      expect(
+        fixture.controller.state.transcript.finalized,
+        'the second paraphrase the third paraphrase the fourth paraphrase '
+        'the fifth paraphrase the sixth paraphrase',
+      );
+      expect(matchedText.last, contains('the second paraphrase'));
+      expect(matchedText.last, isNot(contains('the first paraphrase')));
+
+      connection.eventsController.add(
+        TranscriptionEvent(
+          type: TranscriptionEventType.finalized,
+          text: 'a' * 4000,
+          eventId: 'long-final',
+        ),
+      );
+      await _flush();
+      expect(
+        fixture.controller.state.transcript.finalized.length,
+        SessionController.transcriptLimit,
+      );
+      connection.eventsController.add(
+        TranscriptionEvent(
+          type: TranscriptionEventType.interim,
+          text: 'b' * 4000,
+        ),
+      );
+      await _flush();
+      expect(
+        fixture.controller.state.transcript.interim.length,
+        SessionController.transcriptLimit,
+      );
+      await fixture.controller.stop();
+    },
+  );
 
   test('stop clears transcript, matches, IDs, and timers', () async {
     final fixture = _Fixture(matcher: (_) async => _match);
@@ -382,22 +472,17 @@ const _match = MatchUpdate(
     ),
     score: 1,
     band: ConfidenceBand.high,
-    explicitReference: true,
   ),
 );
 
 class _Fixture {
-  _Fixture({
-    ReconnectDelay? reconnectDelay,
-    TranscriptMatcher? matcher,
-    MatcherReset? resetMatcher,
-  }) : audio = _FakeAudioSource(),
-       client = _FakeTranscriptionClient() {
+  _Fixture({ReconnectDelay? reconnectDelay, TranscriptMatcher? matcher})
+    : audio = _FakeAudioSource(),
+      client = _FakeTranscriptionClient() {
     controller = SessionController(
       audioSource: audio,
       transcriptionClient: client,
       matchTranscript: matcher ?? (_) async => null,
-      resetMatcher: resetMatcher ?? () {},
       reconnectDelay: reconnectDelay ?? (_) async {},
     );
   }

@@ -21,7 +21,6 @@ void main() {
         audioSource: audio,
         transcriptionClient: _PrivacyClient(connection),
         matchTranscript: (_) async => _match,
-        resetMatcher: () {},
       );
 
       try {
@@ -66,7 +65,6 @@ const _match = MatchUpdate(
     ),
     score: 1,
     band: ConfidenceBand.high,
-    explicitReference: true,
   ),
 );
 

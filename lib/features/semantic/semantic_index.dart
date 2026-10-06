@@ -17,8 +17,9 @@ class SemanticIndex implements SemanticVectorIndex {
   SemanticIndex._({
     required this.metadata,
     required this.dimensions,
-    required this._rows,
-  });
+    required List<_IndexRow> rows,
+  }) : _rowCount = rows.length,
+       _rows = rows;
 
   factory SemanticIndex.parse(
     Uint8List bytes, {
@@ -131,10 +132,14 @@ class SemanticIndex implements SemanticVectorIndex {
 
   final SemanticAssetMetadata metadata;
   final int dimensions;
-  final List<_IndexRow> _rows;
+  final int _rowCount;
+  List<_IndexRow> _rows;
+  Future<SendPort>? _worker;
+  bool _disposed = false;
 
   @override
-  Future<List<SemanticHit>> search(List<double> query, {int limit = 8}) {
+  Future<List<SemanticHit>> search(List<double> query, {int limit = 8}) async {
+    if (_disposed) return const [];
     if (query.length != dimensions) {
       throw ArgumentError.value(
         query.length,
@@ -152,9 +157,22 @@ class SemanticIndex implements SemanticVectorIndex {
     if ((math.sqrt(squaredNorm) - 1).abs() > 1e-4) {
       throw ArgumentError.value(query, 'query', 'must be normalized');
     }
-    if (limit <= 0 || _rows.isEmpty) return Future.value(const []);
+    if (limit <= 0 || _rowCount == 0) return const [];
 
     final boundedLimit = math.min(limit, _maximumResults);
+    final worker = await (_worker ??= _startWorker());
+    if (_disposed) return const [];
+    final response = ReceivePort();
+    worker.send(_SearchRequest(query, boundedLimit, response.sendPort));
+    try {
+      return await response.first as List<SemanticHit>;
+    } finally {
+      response.close();
+    }
+  }
+
+  Future<SendPort> _startWorker() async {
+    final ready = ReceivePort();
     final vectorBytes = Uint8List(_rows.length * dimensions);
     final ordinals = <int>[];
     final books = <int>[];
@@ -174,53 +192,128 @@ class SemanticIndex implements SemanticVectorIndex {
       verses.add(row.verse);
       scales.add(row.scale);
     }
+    _rows = const [];
     final transferable = TransferableTypedData.fromList([vectorBytes]);
+    await Isolate.spawn(
+      _runSearchWorker,
+      _SearchWorkerConfig(
+        ready: ready.sendPort,
+        vectors: transferable,
+        ordinals: ordinals,
+        books: books,
+        chapters: chapters,
+        verses: verses,
+        scales: scales,
+        translations: metadata.translations,
+        dimensions: dimensions,
+      ),
+    );
+    try {
+      return await ready.first as SendPort;
+    } finally {
+      ready.close();
+    }
+  }
 
-    return Isolate.run(() {
-      final vectors = transferable.materialize().asUint8List();
-      final scored = <(int, double)>[];
-      for (var row = 0; row < ordinals.length; row++) {
-        var dot = 0.0;
-        final start = row * dimensions;
-        for (var dimension = 0; dimension < dimensions; dimension++) {
-          final byte = vectors[start + dimension];
-          dot += query[dimension] * (byte > 127 ? byte - 256 : byte);
-        }
-        scored.add((row, dot * scales[row]));
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _rows = const [];
+    final worker = _worker;
+    if (worker != null) (await worker).send(null);
+  }
+}
+
+void _runSearchWorker(_SearchWorkerConfig config) {
+  final vectors = config.vectors.materialize().asUint8List();
+  final requests = ReceivePort();
+  config.ready.send(requests.sendPort);
+  requests.listen((message) {
+    if (message == null) {
+      requests.close();
+      return;
+    }
+    final request = message as _SearchRequest;
+    final strongest = <(int, int, int), (int, double)>{};
+    for (var row = 0; row < config.ordinals.length; row++) {
+      var dot = 0.0;
+      final start = row * config.dimensions;
+      for (var dimension = 0; dimension < config.dimensions; dimension++) {
+        final byte = vectors[start + dimension];
+        dot += request.query[dimension] * (byte > 127 ? byte - 256 : byte);
       }
-      scored.sort((left, right) {
+      final score = dot * config.scales[row];
+      final key = (config.books[row], config.chapters[row], config.verses[row]);
+      final current = strongest[key];
+      if (current == null || score > current.$2) strongest[key] = (row, score);
+    }
+    final scored = strongest.values.toList(growable: false)
+      ..sort((left, right) {
         final scoreOrder = right.$2.compareTo(left.$2);
         if (scoreOrder != 0) return scoreOrder;
         final leftRow = left.$1;
         final rightRow = right.$1;
-        var order = books[leftRow].compareTo(books[rightRow]);
-        if (order == 0) order = chapters[leftRow].compareTo(chapters[rightRow]);
-        if (order == 0) order = verses[leftRow].compareTo(verses[rightRow]);
+        var order = config.books[leftRow].compareTo(config.books[rightRow]);
         if (order == 0) {
-          order = metadata.translations[ordinals[leftRow]].compareTo(
-            metadata.translations[ordinals[rightRow]],
-          );
+          order = config.chapters[leftRow].compareTo(config.chapters[rightRow]);
+        }
+        if (order == 0) {
+          order = config.verses[leftRow].compareTo(config.verses[rightRow]);
         }
         return order;
       });
-      return scored
-          .take(boundedLimit)
+    request.response.send(
+      scored
+          .take(request.limit)
           .map((entry) {
             final row = entry.$1;
             return SemanticHit(
               reference: ScriptureReference(
-                book: books[row],
-                chapter: chapters[row],
-                startVerse: verses[row],
-                endVerse: verses[row],
+                book: config.books[row],
+                chapter: config.chapters[row],
+                startVerse: config.verses[row],
+                endVerse: config.verses[row],
               ),
-              translationId: metadata.translations[ordinals[row]],
+              translationId: config.translations[config.ordinals[row]],
               score: entry.$2,
             );
           })
-          .toList(growable: false);
-    });
-  }
+          .toList(growable: false),
+    );
+  });
+}
+
+class _SearchWorkerConfig {
+  const _SearchWorkerConfig({
+    required this.ready,
+    required this.vectors,
+    required this.ordinals,
+    required this.books,
+    required this.chapters,
+    required this.verses,
+    required this.scales,
+    required this.translations,
+    required this.dimensions,
+  });
+
+  final SendPort ready;
+  final TransferableTypedData vectors;
+  final List<int> ordinals;
+  final List<int> books;
+  final List<int> chapters;
+  final List<int> verses;
+  final List<double> scales;
+  final List<String> translations;
+  final int dimensions;
+}
+
+class _SearchRequest {
+  const _SearchRequest(this.query, this.limit, this.response);
+
+  final List<double> query;
+  final int limit;
+  final SendPort response;
 }
 
 bool _sameStrings(List<String> left, List<String> right) {

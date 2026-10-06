@@ -81,7 +81,7 @@ class BibleBuilder {
             ),
           );
         }
-        database.execute('PRAGMA user_version = 1');
+        database.execute('PRAGMA user_version = 2');
         database.execute('COMMIT');
       } catch (_) {
         database.execute('ROLLBACK');
@@ -153,7 +153,6 @@ void _createSchema(Database database) {
       end_verse INTEGER NOT NULL,
       label TEXT NOT NULL,
       display_text TEXT NOT NULL,
-      normalized_text TEXT NOT NULL,
       UNIQUE (
         translation_id,
         book_number,
@@ -162,13 +161,6 @@ void _createSchema(Database database) {
         end_verse
       )
     );
-    CREATE TABLE passage_tokens (
-      passage_id INTEGER NOT NULL,
-      token TEXT NOT NULL,
-      position INTEGER NOT NULL
-    );
-    CREATE INDEX passage_tokens_lookup
-      ON passage_tokens(token, passage_id);
     CREATE INDEX passage_reference_lookup
       ON passages(
         translation_id,
@@ -237,7 +229,6 @@ void _insertPassage(
   final startVerse = verses.first.number;
   final endVerse = verses.last.endNumber;
   final displayText = verses.map((verse) => verse.text).join(' ');
-  final normalized = _tokens(displayText).join(' ');
   final verseLabel = startVerse == endVerse
       ? '$startVerse'
       : '$startVerse–$endVerse';
@@ -250,9 +241,8 @@ void _insertPassage(
         start_verse,
         end_verse,
         label,
-        display_text,
-        normalized_text
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        display_text
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     ''',
     [
       translationId,
@@ -262,25 +252,9 @@ void _insertPassage(
       endVerse,
       '${book.name} $chapter:$verseLabel',
       displayText,
-      normalized,
     ],
   );
-  final passageId = database.lastInsertRowId;
-  final tokens = _tokens(displayText);
-  for (var position = 0; position < tokens.length; position++) {
-    database.execute(
-      'INSERT INTO passage_tokens (passage_id, token, position) '
-      'VALUES (?, ?, ?)',
-      [passageId, tokens[position], position],
-    );
-  }
 }
-
-List<String> _tokens(String text) =>
-    RegExp(r'[a-z0-9]+')
-        .allMatches(text.toLowerCase())
-        .map((match) => match.group(0)!)
-        .toList();
 
 String _slug(String name) {
   var ascii = name.toLowerCase();

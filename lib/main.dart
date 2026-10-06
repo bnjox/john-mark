@@ -9,7 +9,7 @@ import 'features/bible/bible_repository.dart';
 import 'features/bible/display_translation_resolver.dart';
 import 'features/bible/sqlite_bible_repository.dart';
 import 'features/listener/listener_screen.dart';
-import 'features/matching/scripture_detection_engine.dart';
+import 'features/matching/scripture_matcher.dart';
 import 'features/semantic/bge_tokenizer.dart';
 import 'features/semantic/onnx_text_embedder.dart';
 import 'features/semantic/semantic_index.dart';
@@ -27,17 +27,15 @@ Future<void> main() async {
     final semanticService = SemanticSearchService(
       loadAssets: () => _loadSemanticComponents(repository, translations),
     );
-    final detector = ScriptureDetectionEngine(
+    final matcher = ScriptureMatcher(
       repository: repository,
-      translations: translations,
       displayTranslation: displayTranslation,
       semanticRetriever: semanticService,
     );
     final controller = SessionController(
       audioSource: MicrophoneSource(),
       transcriptionClient: const DeepgramClient(),
-      resetMatcher: detector.reset,
-      matchTranscript: detector.match,
+      matchTranscript: matcher.match,
     );
     runApp(
       JohnMarkApp(

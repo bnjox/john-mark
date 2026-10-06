@@ -8,19 +8,18 @@ import 'bounded_audio_queue.dart';
 
 typedef TranscriptMatcher = Future<MatchUpdate?> Function(String finalizedText);
 typedef ReconnectDelay = Future<void> Function(Duration duration);
-typedef MatcherReset = void Function();
 
 class SessionController extends ChangeNotifier {
   SessionController({
     required this.audioSource,
     required this.transcriptionClient,
     required this.matchTranscript,
-    required this.resetMatcher,
     List<String> keyterms = const [],
     this.reconnectDelay = _defaultDelay,
   }) : _keyterms = List.unmodifiable(keyterms);
 
-  static const int transcriptLimit = 1500;
+  static const int transcriptLimit = 3000;
+  static const int recentFinalLimit = 5;
   static const List<Duration> reconnectBackoff = [
     Duration(seconds: 1),
     Duration(seconds: 2),
@@ -32,12 +31,12 @@ class SessionController extends ChangeNotifier {
   final AudioSource audioSource;
   final TranscriptionClient transcriptionClient;
   final TranscriptMatcher matchTranscript;
-  final MatcherReset resetMatcher;
   final ReconnectDelay reconnectDelay;
   final List<String> _keyterms;
   final BoundedAudioQueue _audioQueue = BoundedAudioQueue();
   final Set<String> _finalizedIds = <String>{};
   final List<String> _finalizedIdOrder = <String>[];
+  final List<String> _recentFinals = <String>[];
 
   ListenerViewState _state = const ListenerViewState();
   Future<void> _operations = Future.value();
@@ -61,7 +60,7 @@ class SessionController extends ChangeNotifier {
   Future<void> start() => _serialize(() async {
     if (_active) return;
     final generation = ++_generation;
-    resetMatcher();
+    _recentFinals.clear();
     _matchWork = _MatchWork(generation);
     _active = true;
     _reconnectAttempt = 0;
@@ -186,14 +185,19 @@ class SessionController extends ChangeNotifier {
         );
       case TranscriptionEventType.finalized:
         if (!_rememberFinal(event.eventId)) return;
-        final finalized = _appendFinal(event.text);
+        final finalized = _bounded(event.text.trim());
+        if (finalized.isEmpty) return;
+        _recentFinals.add(finalized);
+        if (_recentFinals.length > recentFinalLimit) _recentFinals.removeAt(0);
         _setState(
           _copyState(
-            transcript: TranscriptUpdate(finalized: finalized),
+            transcript: TranscriptUpdate(
+              finalized: _bounded(_recentFinals.join(' ')),
+            ),
             resultIsStale: false,
           ),
         );
-        _scheduleMatch(generation, finalized);
+        _scheduleMatch(generation, _recentFinals.join('\n'));
       case TranscriptionEventType.disconnected:
         await _beginReconnect(generation);
       case TranscriptionEventType.error:
@@ -264,7 +268,6 @@ class SessionController extends ChangeNotifier {
     _elapsedTimer = null;
     _active = false;
     _cancelMatching();
-    resetMatcher();
     ++_generation;
     _setState(
       _copyState(
@@ -281,7 +284,6 @@ class SessionController extends ChangeNotifier {
     _elapsedTimer = null;
     _active = false;
     _cancelMatching();
-    resetMatcher();
     ++_generation;
     _setState(
       _copyState(
@@ -311,6 +313,7 @@ class SessionController extends ChangeNotifier {
     _audioQueue.clear();
     _finalizedIds.clear();
     _finalizedIdOrder.clear();
+    _recentFinals.clear();
     _reconnectAttempt = 0;
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
@@ -318,7 +321,6 @@ class SessionController extends ChangeNotifier {
     _delayNoticeScheduled = false;
     _liveNoticeScheduled = false;
     _captureFailureScheduled = false;
-    resetMatcher();
   }
 
   void _onCaptureEnded(int generation) {
@@ -381,6 +383,7 @@ class SessionController extends ChangeNotifier {
       final match = await matchTranscript(finalizedText);
       if (identical(_matchWork, work) &&
           _isCurrent(work.generation) &&
+          work.pendingText == null &&
           match != null) {
         _setState(_copyState(matches: match));
       }
@@ -409,13 +412,6 @@ class SessionController extends ChangeNotifier {
       _finalizedIds.remove(_finalizedIdOrder.removeAt(0));
     }
     return true;
-  }
-
-  String _appendFinal(String text) {
-    final addition = text.trim();
-    if (addition.isEmpty) return _state.transcript.finalized;
-    final existing = _state.transcript.finalized;
-    return _bounded(existing.isEmpty ? addition : '$existing $addition');
   }
 
   String _bounded(String text) => text.length <= transcriptLimit

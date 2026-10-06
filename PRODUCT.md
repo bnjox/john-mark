@@ -16,7 +16,7 @@ John Mark captures foreground microphone audio, transcribes it live, and display
 
 ## Positioning
 
-The product combines live transcription with deterministic cross-translation reference and quotation matching plus guarded on-device semantic retrieval for differently worded quotations and paraphrases. It does not use an LLM, infer broad theological themes, or generate theological interpretation.
+The product combines live transcription with deterministic explicit-reference parsing and on-device semantic retrieval for quotations and paraphrases. It does not use an LLM, infer broad theological themes, or generate theological interpretation.
 
 ## Operating Context
 
@@ -30,8 +30,8 @@ The app is used for 60–90 minute sermons in a dim AV environment. The operator
 - Semantic queries and vectors remain on-device and are not logged or persisted.
 - Bible translations are supplied privately and compiled into a bundled read-only SQLite database.
 - All bundled translations contribute matching evidence; display and context use NKJV or a deterministic fallback.
-- Explicit references and strong lexical evidence outrank semantic evidence; ambiguous or weak evidence produces no result.
-- Missing or invalid semantic assets degrade to explicit-reference and quotation matching without disabling listening.
+- Valid explicit references resolve immediately; other speech uses the local semantic model, and weak evidence produces no result.
+- Missing or invalid semantic assets leave explicit-reference matching available without disabling listening.
 - One featured passage and at most three alternatives are shown.
 - Connectivity loss discards queued audio and resumes from current speech without replay.
 
@@ -41,7 +41,7 @@ The product name is **John Mark**, described as a **Live Scripture Companion**. 
 
 ## Evidence on Hand
 
-The original product design and interaction wireframes are in `docs/superpowers/specs/2026-09-24-mobile-scripture-listener-design.md`; the translation-neutral matching behavior is specified in `docs/superpowers/specs/2026-09-25-semantic-scripture-detection-design.md`. Private Bible data and sermon evaluation fixtures must not be fabricated or committed.
+The original product design and interaction wireframes are in `docs/superpowers/specs/2026-09-24-mobile-scripture-listener-design.md`. Private Bible data must not be fabricated or committed.
 
 ## Product Principles
 

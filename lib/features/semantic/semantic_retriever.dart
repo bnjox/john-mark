@@ -40,4 +40,6 @@ abstract interface class SemanticRetriever {
 
 abstract interface class SemanticVectorIndex {
   Future<List<SemanticHit>> search(List<double> query, {int limit = 8});
+
+  Future<void> dispose();
 }

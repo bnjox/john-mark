@@ -87,7 +87,6 @@ void main() {
             ),
             score: 1,
             band: ConfidenceBand.high,
-            explicitReference: true,
           ),
           alternatives: [
             MatchCandidate(
@@ -103,7 +102,6 @@ void main() {
               ),
               score: 0.72,
               band: ConfidenceBand.possible,
-              explicitReference: false,
             ),
           ],
         ),
@@ -198,7 +196,6 @@ class _FakeSessionController extends SessionController {
         audioSource: _UnusedAudioSource(),
         transcriptionClient: _UnusedTranscriptionClient(),
         matchTranscript: (_) async => null,
-        resetMatcher: () {},
       );
 
   ListenerViewState _fakeState = const ListenerViewState();
@@ -257,19 +254,6 @@ class _FakeBibleRepository implements BibleRepository {
     String translationId,
     ScriptureReference reference,
   ) async => null;
-
-  @override
-  Future<List<Passage>> quoteCandidates(
-    String translationId,
-    List<String> tokens, {
-    int limit = 40,
-  }) async => const [];
-
-  @override
-  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
-    List<String> tokens, {
-    int limitPerTranslation = 40,
-  }) async => const [];
 
   @override
   Future<String> fingerprint() async => 'fake-fingerprint';

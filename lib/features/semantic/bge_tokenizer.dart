@@ -51,16 +51,16 @@ class BgeTokenizer {
     final pieces = <int>[];
     for (final token in _basicTokens(text)) {
       pieces.addAll(_wordPieces(token));
-      if (pieces.length >= maxLength - 2) break;
     }
 
     final inputIds = Int64List(maxLength);
     final attentionMask = Int64List(maxLength);
     final tokenTypeIds = Int64List(maxLength);
     final contentLength = pieces.length.clamp(0, maxLength - 2);
+    final contentStart = pieces.length - contentLength;
     inputIds[0] = _classificationId;
     for (var index = 0; index < contentLength; index++) {
-      inputIds[index + 1] = pieces[index];
+      inputIds[index + 1] = pieces[contentStart + index];
     }
     inputIds[contentLength + 1] = _separatorId;
     attentionMask.fillRange(0, contentLength + 2, 1);

@@ -1,9 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:john_mark/core/models.dart';
 import 'package:john_mark/features/bible/bible_repository.dart';
-import 'package:john_mark/features/matching/match_stabilizer.dart';
-import 'package:john_mark/features/matching/quote_matcher.dart';
 import 'package:john_mark/features/matching/reference_parser.dart';
+import 'package:john_mark/features/matching/scripture_matcher.dart';
+import 'package:john_mark/features/semantic/bge_tokenizer.dart';
+import 'package:john_mark/features/semantic/semantic_retriever.dart';
 
 void main() {
   const john316 = Passage(
@@ -24,223 +25,197 @@ void main() {
       endVerse: 7,
     ),
     label: '1 Corinthians 13:4–7',
-    text:
-        'Love is patient and kind. Love does not envy or boast. '
-        'It protects, trusts, hopes, and perseveres.',
+    text: 'Love is patient and kind.',
   );
 
+  test('BGE tokenizer retains the newest tokens when input is too long', () {
+    final tokenizer = BgeTokenizer.fromVocabulary(
+      '[UNK]\n[CLS]\n[SEP]\nold\nnew\none\ntwo\nthree',
+    );
+
+    final inputs = tokenizer.encode(
+      'old old old new one two three',
+      maxLength: 5,
+    );
+
+    expect(inputs.inputIds, [1, 5, 6, 7, 2]);
+  });
+
   group('ReferenceParser', () {
-    test('parses compact spoken and ordinal range references', () async {
-      final repository = _FakeBibleRepository({
-        'alpha': [john316, corinthians],
-      });
-      final parser = ReferenceParser(repository);
+    const parser = ReferenceParser();
 
-      final compact = await parser.parse('John three sixteen', 'alpha');
-      final range = await parser.parse(
-        'First Corinthians thirteen four through seven',
-        'alpha',
-      );
-
-      expect(compact?.passage.label, 'John 3:16');
-      expect(compact?.score, 1);
-      expect(compact?.band, ConfidenceBand.high);
-      expect(compact?.explicitReference, isTrue);
-      expect(range?.passage.label, '1 Corinthians 13:4–7');
-    });
-
-    test('rejects ordinary speech containing a book name and number', () async {
-      final parser = ReferenceParser(
-        _FakeBibleRepository({
-          'alpha': [john316],
-        }),
-      );
-
+    test('parses compact, numbered-book, and range references', () {
+      expect(parser.parse('John three sixteen'), john316.reference);
       expect(
-        await parser.parse('John spoke for three minutes', 'alpha'),
-        isNull,
+        parser.parse('First Corinthians thirteen four through seven'),
+        corinthians.reference,
       );
-    });
-  });
-
-  group('QuoteMatcher', () {
-    test('accepts exact and close imperfect quotations', () async {
-      final matcher = QuoteMatcher(
-        _FakeBibleRepository({
-          'alpha': [john316],
-        }),
-      );
-
-      final exact = await matcher.match(john316.text, 'alpha');
-      final imperfect = await matcher.match(
-        'The maker cherished the whole world then offered his beloved son',
-        'alpha',
-      );
-
-      expect(exact.single.passage.label, 'John 3:16');
-      expect(exact.single.score, 1);
-      expect(imperfect.single.passage.label, 'John 3:16');
-      expect(imperfect.single.score, greaterThanOrEqualTo(0.78));
+      expect(parser.parse('First John chapter three verse sixteen')?.book, 62);
     });
 
-    test('rejects unrelated and ambiguous short speech', () async {
-      final matcher = QuoteMatcher(
-        _FakeBibleRepository({
-          'alpha': [john316, corinthians],
-        }),
-      );
-
+    test('returns the latest reference and rejects ordinary speech', () {
       expect(
-        await matcher.match('Please move the camera to the left', 'alpha'),
-        isEmpty,
-      );
-      expect(await matcher.match('love one another', 'alpha'), isEmpty);
-    });
-
-    test('searches only the selected translation', () async {
-      const otherTranslation = Passage(
-        reference: ScriptureReference(
-          book: 43,
-          chapter: 3,
-          startVerse: 16,
-          endVerse: 16,
+        parser.parse(
+          'John three sixteen, then First Corinthians thirteen four to seven',
         ),
-        label: 'John 3:16',
-        text: 'Completely different wording in the second translation.',
+        corinthians.reference,
       );
-      final repository = _FakeBibleRepository({
-        'alpha': [john316],
-        'beta': [otherTranslation],
-      });
-      final matcher = QuoteMatcher(repository);
-
-      final matches = await matcher.match(john316.text, 'alpha');
-
-      expect(matches.single.passage.text, john316.text);
-      expect(repository.queriedTranslations, ['alpha']);
+      expect(parser.parse('John spoke for three minutes'), isNull);
     });
   });
 
-  group('MatchStabilizer', () {
-    const config = MatchConfig();
+  group('ScriptureMatcher', () {
+    test('resolves an explicit reference without running the model', () async {
+      final semantic = _FakeSemanticRetriever([
+        SemanticHit(
+          reference: corinthians.reference,
+          translationId: 'alpha',
+          score: 0.95,
+        ),
+      ]);
+      final matcher = _matcher(
+        passages: [john316, corinthians],
+        semantic: semantic,
+      );
 
-    test(
-      'shows strong matches immediately and suppresses unchanged updates',
-      () {
-        final stabilizer = MatchStabilizer(config);
-        final candidate = _candidate(john316, 0.9);
+      final update = await matcher.match(
+        'older paraphrase\nplease open John chapter three verse sixteen',
+      );
 
-        expect(stabilizer.update([candidate])?.featured, same(candidate));
-        expect(stabilizer.update([candidate]), isNull);
-      },
-    );
-
-    test('requires two windows for possible matches', () {
-      final stabilizer = MatchStabilizer(config);
-      final candidate = _candidate(john316, 0.7);
-
-      expect(stabilizer.update([candidate]), isNull);
-      expect(stabilizer.update([candidate])?.featured, same(candidate));
+      expect(update?.featured?.passage, john316);
+      expect(update?.featured?.score, 1);
+      expect(update?.alternatives, isEmpty);
+      expect(semantic.queries, isEmpty);
     });
 
-    test(
-      'does not replace a stronger result without the configured margin',
-      () {
-        final stabilizer = MatchStabilizer(config);
-        final first = _candidate(john316, 0.9);
-        final second = _candidate(corinthians, 0.95);
-
-        expect(stabilizer.update([first])?.featured, same(first));
-        expect(stabilizer.update([second]), isNull);
-        expect(stabilizer.current.featured, same(first));
-      },
-    );
-
-    test('returns at most three distinct alternatives', () {
-      final featured = _candidate(john316, 0.95);
-      final candidates = <MatchCandidate>[
-        featured,
-        featured,
-        for (var verse = 1; verse <= 5; verse++)
-          _candidate(
-            Passage(
-              reference: ScriptureReference(
-                book: 19,
-                chapter: 1,
-                startVerse: verse,
-                endVerse: verse,
-              ),
-              label: 'Psalm 1:$verse',
-              text: 'Candidate passage number $verse with sufficient wording.',
+    test('ranks, deduplicates, and thresholds semantic results', () async {
+      final psalms = [
+        for (var verse = 1; verse <= 4; verse++)
+          Passage(
+            reference: ScriptureReference(
+              book: 19,
+              chapter: 1,
+              startVerse: verse,
+              endVerse: verse,
             ),
-            0.8 - verse / 100,
+            label: 'Psalm 1:$verse',
+            text: 'Psalm candidate $verse.',
           ),
       ];
-
-      final update = MatchStabilizer(config).update(candidates)!;
-
-      expect(update.alternatives, hasLength(3));
-      expect(
-        update.alternatives.map((candidate) => candidate.passage.label).toSet(),
-        hasLength(3),
+      final semantic = _FakeSemanticRetriever([
+        SemanticHit(
+          reference: corinthians.reference,
+          translationId: 'beta',
+          score: 0.84,
+        ),
+        SemanticHit(
+          reference: john316.reference,
+          translationId: 'alpha',
+          score: 0.91,
+        ),
+        SemanticHit(
+          reference: corinthians.reference,
+          translationId: 'alpha',
+          score: 0.86,
+        ),
+        for (var index = 0; index < psalms.length; index++)
+          SemanticHit(
+            reference: psalms[index].reference,
+            translationId: 'alpha',
+            score: switch (index) {
+              0 => 0.85,
+              1 => 0.79,
+              2 => 0.74,
+              _ => 0.73,
+            },
+          ),
+        const SemanticHit(
+          reference: ScriptureReference(
+            book: 1,
+            chapter: 1,
+            startVerse: 1,
+            endVerse: 1,
+          ),
+          translationId: 'alpha',
+          score: 0.81,
+        ),
+      ]);
+      final matcher = _matcher(
+        passages: [john316, corinthians, ...psalms],
+        semantic: semantic,
       );
+
+      final update = await matcher.match('a paraphrase across recent speech');
+
+      expect(update?.featured?.passage, john316);
+      expect(update?.featured?.band, ConfidenceBand.high);
+      expect(update?.alternatives.map((candidate) => candidate.passage.label), [
+        '1 Corinthians 13:4–7',
+        'Psalm 1:1',
+        'Psalm 1:2',
+      ]);
+      expect(update?.alternatives.last.score, 0.79);
+      expect(update?.alternatives.first.band, ConfidenceBand.possible);
+      expect(semantic.queries, ['a paraphrase across recent speech']);
     });
+
+    test(
+      'returns no update when the model is unavailable or uncertain',
+      () async {
+        final unavailable = _matcher(
+          passages: [john316],
+          semantic: _FakeSemanticRetriever(
+            const [],
+            status: SemanticStatus.unavailable,
+          ),
+        );
+        final uncertain = _matcher(
+          passages: [john316],
+          semantic: _FakeSemanticRetriever([
+            SemanticHit(
+              reference: john316.reference,
+              translationId: 'alpha',
+              score: 0.81,
+            ),
+          ]),
+        );
+
+        expect(await unavailable.match('ordinary speech'), isNull);
+        expect(await uncertain.match('ordinary speech'), isNull);
+      },
+    );
   });
 }
 
-MatchCandidate _candidate(Passage passage, double score) => MatchCandidate(
-  passage: passage,
-  score: score,
-  band: score >= 0.78 ? ConfidenceBand.high : ConfidenceBand.possible,
-  explicitReference: false,
+ScriptureMatcher _matcher({
+  required List<Passage> passages,
+  required SemanticRetriever semantic,
+}) => ScriptureMatcher(
+  repository: _FakeBibleRepository(passages),
+  displayTranslation: const Translation(id: 'alpha', name: 'Alpha'),
+  semanticRetriever: semantic,
 );
 
 class _FakeBibleRepository implements BibleRepository {
-  _FakeBibleRepository(this.passagesByTranslation);
+  _FakeBibleRepository(this.passages);
 
-  final Map<String, List<Passage>> passagesByTranslation;
-  final List<String> queriedTranslations = [];
+  final List<Passage> passages;
 
   @override
   Future<Passage?> passage(
     String translationId,
     ScriptureReference reference,
   ) async {
-    for (final passage in passagesByTranslation[translationId] ?? const []) {
-      if (_sameReference(passage.reference, reference)) return passage;
+    for (final passage in passages) {
+      if (passage.reference == reference) return passage;
     }
     return null;
   }
 
   @override
-  Future<List<Passage>> quoteCandidates(
-    String translationId,
-    List<String> tokens, {
-    int limit = 40,
-  }) async {
-    queriedTranslations.add(translationId);
-    return (passagesByTranslation[translationId] ?? const [])
-        .take(limit)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<List<SourcedPassage>> quoteCandidatesAcrossTranslations(
-    List<String> tokens, {
-    int limitPerTranslation = 40,
-  }) async => [
-    for (final entry in passagesByTranslation.entries)
-      for (final passage in entry.value.take(limitPerTranslation))
-        SourcedPassage(translationId: entry.key, passage: passage),
+  Future<List<Translation>> translations() async => const [
+    Translation(id: 'alpha', name: 'Alpha'),
   ];
-
-  @override
-  Future<String> fingerprint() async => 'fake-fingerprint';
-
-  @override
-  Future<List<Translation>> translations() async => passagesByTranslation.keys
-      .map((id) => Translation(id: id, name: id))
-      .toList(growable: false);
 
   @override
   Future<Passage?> context(
@@ -251,11 +226,23 @@ class _FakeBibleRepository implements BibleRepository {
   }) => passage(translationId, reference);
 
   @override
+  Future<String> fingerprint() async => 'fake-fingerprint';
+
+  @override
   Future<void> close() async {}
 }
 
-bool _sameReference(ScriptureReference left, ScriptureReference right) =>
-    left.book == right.book &&
-    left.chapter == right.chapter &&
-    left.startVerse == right.startVerse &&
-    left.endVerse == right.endVerse;
+class _FakeSemanticRetriever implements SemanticRetriever {
+  _FakeSemanticRetriever(this.hits, {this.status = SemanticStatus.ready});
+
+  final List<SemanticHit> hits;
+  @override
+  final SemanticStatus status;
+  final List<String> queries = [];
+
+  @override
+  Future<List<SemanticHit>> search(String text, {int limit = 8}) async {
+    queries.add(text);
+    return hits.take(limit).toList(growable: false);
+  }
+}

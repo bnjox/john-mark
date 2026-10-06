@@ -42,6 +42,7 @@ class SemanticSearchService extends ChangeNotifier
       final components = await _loadAssets();
       if (_disposed) {
         await components.embedder.dispose();
+        await components.index.dispose();
         return;
       }
       _components = components;
@@ -118,7 +119,10 @@ class SemanticSearchService extends ChangeNotifier
     _pendingSearch = null;
     final components = _components;
     _components = null;
-    if (components != null) unawaited(components.embedder.dispose());
+    if (components != null) {
+      unawaited(components.embedder.dispose());
+      unawaited(components.index.dispose());
+    }
     super.dispose();
   }
 }

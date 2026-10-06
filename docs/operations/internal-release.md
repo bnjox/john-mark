@@ -1,8 +1,8 @@
 # Internal release workflow
 
 This app is for controlled internal distribution. Run every command from the
-repository root on the release commit. Private Bible sources, evaluation
-fixtures, the generated database, and credentials must remain outside Git.
+repository root on the release commit. Private Bible sources, the generated
+database, and credentials must remain outside Git.
 
 ## Prerequisites
 
@@ -41,7 +41,6 @@ uv run tool/test_semantic_tools.py
 dart run tool/build_bibles.dart private/bibles/NKJV.fsb private/bibles/KJV.xml --output assets/bibles.db
 uv run tool/fetch_semantic_model.py
 uv run tool/build_semantic_index.py --database assets/bibles.db --model private/models/bge-base-en-v1.5 --output assets/semantic/scripture_embeddings.bin
-dart run tool/evaluate.dart --database assets/bibles.db --fixtures private/evaluation/sermons.ndjson
 dart format --output=none --set-exit-if-changed tool lib test
 flutter test
 flutter analyze
@@ -49,12 +48,9 @@ flutter build apk --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 flutter build ios --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 ```
 
-The CLI evaluator is translation-neutral but lexical-only; the mobile ONNX
-runtime does not run through plain `dart run`. It prints six aggregate values
-only. Store only those aggregate values in the acceptance record; never copy
-transcript or verse text into release notes, logs, tickets, or CI output.
 Measure semantic quality and runtime behavior in profile mode on representative
-Android and iPhone devices.
+Android and iPhone devices. Never copy transcript or verse text into release
+notes, logs, tickets, or CI output.
 
 Confirm `private/models/`, `assets/bibles.db`, and generated files under
 `assets/semantic/` remain ignored and unstaged. The model fetch verifies a
@@ -111,8 +107,8 @@ source files as a source-control or CI artifact.
 
 The app searches all bundled translations but displays NKJV when available, or
 a deterministic named fallback otherwise. Missing, stale, or invalid semantic
-assets leave explicit-reference and quotation matching operational; that safe
-degradation must still be verified on the signed release artifact.
+assets leave explicit-reference matching operational; that safe degradation
+must still be verified on the signed release artifact.
 
 ## Release decision
 

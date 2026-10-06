@@ -65,6 +65,10 @@ class IndexToolTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def test_builder_declares_onnx_backend_dependencies(self) -> None:
+        builder = Path(__file__).with_name("build_semantic_index.py").read_text()
+        self.assertIn('"sentence-transformers[onnx]==5.1.2"', builder)
+
     def test_reads_only_single_verses_in_deterministic_order(self) -> None:
         verses = read_verses(self.database)
         self.assertEqual([verse.text for verse in verses], ["first", "second"])

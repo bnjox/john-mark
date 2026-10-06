@@ -3,23 +3,23 @@
 John Mark is an internal Android/iPhone Flutter app and live scripture companion
 for a sermon operator. It streams foreground microphone audio to Deepgram
 Nova-3, searches every bundled Bible translation on-device, and displays
-precision-first explicit-reference, quotation, or guarded semantic matches.
+explicit references, quotations, and paraphrases as scripture matches.
 
 ## Architecture and privacy
 
-Flutter owns microphone capture, the direct Deepgram WebSocket, deterministic
-lexical matching, BGE-base ONNX inference, bounded session coordination, and the
-responsive operator screen. Build-time tooling converts licensed FSB/XML
+Flutter owns microphone capture, the direct Deepgram WebSocket, explicit
+reference parsing, BGE-base ONNX inference, bounded session coordination, and
+the responsive operator screen. Build-time tooling converts licensed FSB/XML
 sources into one read-only SQLite asset and a validated int8 semantic index.
-The matcher prioritizes explicit references, strong cross-translation lexical
-evidence, then guarded semantic evidence. It prefers no result over a weak
-result and displays one featured passage plus at most three alternatives.
+Explicit references resolve directly. Other speech is embedded on-device and
+matched against the semantic index. The app displays one featured passage plus
+at most three above-threshold alternatives.
 
 Matching uses all bundled translations. Display text and surrounding context
 use NKJV when bundled, otherwise a deterministic named fallback translation.
 There is no operator translation selection or saved translation preference.
-Missing, stale, or invalid semantic assets degrade safely to reference and
-quotation matching rather than preventing listening.
+Missing, stale, or invalid semantic assets degrade safely to explicit-reference
+matching rather than preventing listening.
 
 Sermon audio, transcripts, passage history, and session history are held in
 bounded memory only and are not intentionally persisted or logged. Audio is
@@ -33,7 +33,6 @@ model, tokenizer, and semantic index are build assets, not session history.
 - `uv` with Python 3.12 or newer for semantic asset tooling
 - Android SDK; macOS and Xcode for iOS 16+ release builds
 - Legally licensed Bible source files under `private/bibles/`
-- Private NDJSON evaluation fixtures under `private/evaluation/`
 - A restricted Deepgram key in the `DEEPGRAM_API_KEY` environment variable
 
 Private inputs, `assets/bibles.db`, environment files, and credentials are
@@ -96,29 +95,15 @@ and builds require macOS, Xcode, and configured signing.
 After loading `.env` as above:
 
 ```bash
-dart run tool/evaluate.dart --database assets/bibles.db --fixtures private/evaluation/sermons.ndjson
 flutter test
 flutter analyze
 flutter build apk --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 flutter build ios --release --dart-define=DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY"
 ```
 
-The CLI evaluator is intentionally lexical-only because the mobile ONNX runtime
-cannot execute under plain `dart run`. It reads one translation-neutral JSON
-object per line with nullable `expected`, and either one `transcript` matcher
-window or explicit ordered `windows`:
-
-```json
-{"transcript":"John chapter three verse sixteen","expected":"John 3:16"}
-{"windows":["first rolling window","next rolling window"],"expected":"John 3:16"}
-```
-
-A `transcript` is evaluated exactly once. Each `windows` entry is passed to the
-matcher once, in order, and should contain the rolling text exactly as the live
-session would present it. The evaluator prints aggregate metrics only and never
-prints transcript or verse text. Evaluate semantic quality, cold start,
-latency, memory, battery, and thermal behavior in owner-run mobile profile
-sessions on representative Android and iPhone devices.
+Evaluate semantic quality, cold start, latency, memory, battery, and thermal
+behavior in owner-run mobile profile sessions on representative Android and
+iPhone devices because the ONNX runtime executes on-device.
 
 Audio delivery awaits one `dart:io` WebSocket `addStream` call per frame. This
 bounds the controller to one in-flight transport write plus its 64-frame queue;
@@ -130,4 +115,3 @@ acknowledged it over the network.
 - [Internal release workflow](docs/operations/internal-release.md)
 - [Release acceptance checklist](docs/operations/acceptance-checklist.md)
 - [Original product design](docs/superpowers/specs/2026-09-24-mobile-scripture-listener-design.md)
-- [Semantic detection design](docs/superpowers/specs/2026-09-25-semantic-scripture-detection-design.md)

@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #   "numpy==2.5.3",
-#   "sentence-transformers==6.0.1",
+#   "sentence-transformers[onnx]==5.1.2",
 # ]
 # ///
 """Build the private semantic scripture index without printing verse text."""

@@ -59,51 +59,6 @@ const _tens = <String, int>{
   'ninetieth': 90,
 };
 
-const _stopWords = <String>{
-  'a',
-  'an',
-  'and',
-  'are',
-  'as',
-  'at',
-  'be',
-  'but',
-  'by',
-  'for',
-  'from',
-  'he',
-  'her',
-  'his',
-  'i',
-  'in',
-  'is',
-  'it',
-  'its',
-  'me',
-  'my',
-  'not',
-  'of',
-  'on',
-  'or',
-  'our',
-  'she',
-  'that',
-  'the',
-  'their',
-  'them',
-  'then',
-  'they',
-  'this',
-  'to',
-  'us',
-  'was',
-  'we',
-  'were',
-  'with',
-  'you',
-  'your',
-};
-
 String normalizeSpokenText(String text) {
   final plain = text
       .toLowerCase()
@@ -125,19 +80,6 @@ String normalizeSpokenText(String text) {
     }
   }
   return output.join(' ');
-}
-
-List<String> normalizedTokens(String text) {
-  final normalized = normalizeSpokenText(text);
-  return normalized.isEmpty ? const [] : normalized.split(' ');
-}
-
-List<String> significantTokens(String text, {int? limit}) {
-  final tokens = normalizedTokens(text)
-      .where((token) => !_stopWords.contains(token))
-      .toList(growable: false);
-  if (limit == null || tokens.length <= limit) return tokens;
-  return tokens.sublist(tokens.length - limit);
 }
 
 ({int value, int end})? _readNumber(List<String> tokens, int start) {
