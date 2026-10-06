@@ -40,7 +40,7 @@ class ScriptureMatcher {
       }
     }
 
-    if (semanticRetriever.status != SemanticStatus.ready) return null;
+    if (semanticRetriever.status == SemanticStatus.unavailable) return null;
     final hits = await semanticRetriever.search(finalizedText, limit: 8);
     final strongest = <ScriptureReference, SemanticHit>{};
     for (final hit in hits) {
@@ -54,22 +54,28 @@ class ScriptureMatcher {
       ..sort(_compareSemanticHits);
     if (ranked.isEmpty || ranked.first.score < _semanticThreshold) return null;
     final candidates = <MatchCandidate>[];
-    for (final hit in ranked) {
-      final passage = await repository.passage(
-        displayTranslation.id,
-        hit.reference,
-      );
-      if (passage == null) continue;
-      candidates.add(
-        MatchCandidate(
-          passage: passage,
-          score: hit.score,
-          band: hit.score >= _highConfidenceThreshold
-              ? ConfidenceBand.high
-              : ConfidenceBand.possible,
-        ),
-      );
-      if (candidates.length == 4) break;
+    for (var offset = 0; offset < ranked.length && candidates.length < 4;) {
+      final batch = ranked.skip(offset).take(4).toList(growable: false);
+      offset += batch.length;
+      final passages = await Future.wait([
+        for (final hit in batch)
+          repository.passage(displayTranslation.id, hit.reference),
+      ]);
+      for (var index = 0; index < batch.length; index++) {
+        final passage = passages[index];
+        if (passage == null) continue;
+        final hit = batch[index];
+        candidates.add(
+          MatchCandidate(
+            passage: passage,
+            score: hit.score,
+            band: hit.score >= _highConfidenceThreshold
+                ? ConfidenceBand.high
+                : ConfidenceBand.possible,
+          ),
+        );
+        if (candidates.length == 4) break;
+      }
     }
     if (candidates.isEmpty) return null;
     return MatchUpdate(

@@ -41,6 +41,18 @@ void main() {
     expect(inputs.inputIds, [1, 5, 6, 7, 2]);
   });
 
+  test('BGE tokenizer does not pad short input to the model maximum', () {
+    final tokenizer = BgeTokenizer.fromVocabulary(
+      '[UNK]\n[CLS]\n[SEP]\nshort\nquery',
+    );
+
+    final inputs = tokenizer.encode('short query');
+
+    expect(inputs.inputIds, [1, 3, 4, 2]);
+    expect(inputs.attentionMask, [1, 1, 1, 1]);
+    expect(inputs.tokenTypeIds, [0, 0, 0, 0]);
+  });
+
   group('ReferenceParser', () {
     const parser = ReferenceParser();
 

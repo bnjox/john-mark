@@ -53,17 +53,18 @@ class BgeTokenizer {
       pieces.addAll(_wordPieces(token));
     }
 
-    final inputIds = Int64List(maxLength);
-    final attentionMask = Int64List(maxLength);
-    final tokenTypeIds = Int64List(maxLength);
     final contentLength = pieces.length.clamp(0, maxLength - 2);
     final contentStart = pieces.length - contentLength;
+    final sequenceLength = contentLength + 2;
+    final inputIds = Int64List(sequenceLength);
+    final attentionMask = Int64List(sequenceLength);
+    final tokenTypeIds = Int64List(sequenceLength);
     inputIds[0] = _classificationId;
     for (var index = 0; index < contentLength; index++) {
       inputIds[index + 1] = pieces[contentStart + index];
     }
     inputIds[contentLength + 1] = _separatorId;
-    attentionMask.fillRange(0, contentLength + 2, 1);
+    attentionMask.fillRange(0, sequenceLength, 1);
     return BgeInputs(
       inputIds: inputIds,
       attentionMask: attentionMask,

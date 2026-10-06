@@ -23,6 +23,7 @@ class SemanticSearchService extends ChangeNotifier
   SemanticComponents? _components;
   Future<void>? _initialization;
   Future<void>? _activeSearch;
+  _PendingSearch? _initializingSearch;
   _PendingSearch? _pendingSearch;
   bool _disposed = false;
   String? _diagnosticCategory;
@@ -47,8 +48,13 @@ class SemanticSearchService extends ChangeNotifier
       }
       _components = components;
       _setStatus(SemanticStatus.ready);
+      final waiting = _initializingSearch;
+      _initializingSearch = null;
+      if (waiting != null) _start(waiting);
     } catch (error) {
       if (_disposed) return;
+      _initializingSearch?.complete(const []);
+      _initializingSearch = null;
       _diagnosticCategory = error.runtimeType.toString();
       _setStatus(SemanticStatus.unavailable);
     }
@@ -56,10 +62,18 @@ class SemanticSearchService extends ChangeNotifier
 
   @override
   Future<List<SemanticHit>> search(String text, {int limit = 8}) {
-    if (_disposed || _status != SemanticStatus.ready || text.trim().isEmpty) {
+    if (_disposed ||
+        _status == SemanticStatus.unavailable ||
+        text.trim().isEmpty) {
       return Future.value(const []);
     }
     final request = _PendingSearch(text, limit.clamp(1, 8));
+    if (_status == SemanticStatus.initializing) {
+      _initializingSearch?.complete(const []);
+      _initializingSearch = request;
+      unawaited(initialize());
+      return request.future;
+    }
     if (_activeSearch != null) {
       _pendingSearch?.complete(const []);
       _pendingSearch = request;
@@ -115,6 +129,8 @@ class SemanticSearchService extends ChangeNotifier
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _initializingSearch?.complete(const []);
+    _initializingSearch = null;
     _pendingSearch?.complete(const []);
     _pendingSearch = null;
     final components = _components;
