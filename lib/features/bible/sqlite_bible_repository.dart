@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
@@ -9,40 +7,70 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../core/models.dart';
 import 'bible_repository.dart';
+import 'corpus_manifest.dart';
 
 class SqliteBibleRepository implements BibleRepository {
-  SqliteBibleRepository._(this._database);
+  SqliteBibleRepository._(this._database, this._fingerprint);
 
   final Database _database;
+  final String _fingerprint;
 
   static Future<SqliteBibleRepository> open({
     String assetPath = 'assets/bibles.db',
+    String manifestAssetPath = 'assets/bibles.manifest.json',
     String databaseName = 'bibles.db',
+    AssetBundle? bundle,
+    String? databaseDirectory,
+    DatabaseFactory? databaseFactory,
   }) async {
-    final directory = await getDatabasesPath();
+    final assets = bundle ?? rootBundle;
+    final manifest = CorpusManifest.parse(
+      await assets.loadString(manifestAssetPath),
+    );
+    final factory = databaseFactory ?? databaseFactorySqflitePlugin;
+    final directory = databaseDirectory ?? await getDatabasesPath();
     final destination = File(path.join(directory, databaseName));
-    await destination.parent.create(recursive: true);
-
-    final data = await rootBundle.load(assetPath);
+    final marker = File('${destination.path}.manifest');
     final temporary = File('${destination.path}.tmp');
-    try {
-      await temporary.writeAsBytes(
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        flush: true,
-      );
-      await temporary.rename(destination.path);
-    } finally {
-      if (await temporary.exists()) {
-        await temporary.delete();
+    final temporaryMarker = File('${marker.path}.tmp');
+    await destination.parent.create(recursive: true);
+    await _deleteIfPresent(temporary);
+    await _deleteIfPresent(temporaryMarker);
+
+    if (await _matchesInstalled(destination, marker, manifest)) {
+      try {
+        return await _openValidated(factory, destination.path, manifest);
+      } catch (_) {
+        // The generated database is safe to replace from the bundled asset.
       }
     }
 
-    final database = await openDatabase(
-      destination.path,
-      readOnly: true,
-      singleInstance: false,
+    final data = await assets.load(assetPath);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
     );
-    return SqliteBibleRepository._(database);
+    if (bytes.length != manifest.databaseBytes ||
+        sha256.convert(bytes).toString() != manifest.assetId) {
+      throw const FormatException('Bible database does not match its manifest');
+    }
+    try {
+      await temporary.writeAsBytes(bytes, flush: true);
+      final candidate = await _openValidated(
+        factory,
+        temporary.path,
+        manifest,
+        checkIntegrity: true,
+      );
+      await candidate.close();
+      await temporary.rename(destination.path);
+      await temporaryMarker.writeAsString(manifest.encode(), flush: true);
+      await temporaryMarker.rename(marker.path);
+      return await _openValidated(factory, destination.path, manifest);
+    } finally {
+      await _deleteIfPresent(temporary);
+      await _deleteIfPresent(temporaryMarker);
+    }
   }
 
   @override
@@ -67,19 +95,18 @@ class SqliteBibleRepository implements BibleRepository {
     String translationId,
     ScriptureReference reference,
   ) async {
-    final exact = await _database.rawQuery(
+    final verses = await _database.rawQuery(
       '''
-        SELECT p.*, b.name AS book_name
-        FROM passages p
+        SELECT v.verse, v.display_text, b.name AS book_name
+        FROM verses v
         JOIN books b
-          ON b.translation_id = p.translation_id
-          AND b.number = p.book_number
-        WHERE p.translation_id = ?
-          AND p.book_number = ?
-          AND p.chapter = ?
-          AND p.start_verse = ?
-          AND p.end_verse = ?
-        LIMIT 1
+          ON b.translation_id = v.translation_id
+          AND b.number = v.book_number
+        WHERE v.translation_id = ?
+          AND v.book_number = ?
+          AND v.chapter = ?
+          AND v.verse BETWEEN ? AND ?
+        ORDER BY v.verse
       ''',
       [
         translationId,
@@ -89,13 +116,10 @@ class SqliteBibleRepository implements BibleRepository {
         reference.endVerse,
       ],
     );
-    if (exact.isNotEmpty) return _passageFromRow(exact.single);
-
-    final verses = await _individualVerses(translationId, reference);
     if (!_covers(verses, reference.startVerse, reference.endVerse)) {
       return null;
     }
-    return _combine(verses, reference.startVerse, reference.endVerse);
+    return _combine(verses, reference);
   }
 
   @override
@@ -110,24 +134,23 @@ class SqliteBibleRepository implements BibleRepository {
     }
     final rows = await _database.rawQuery(
       '''
-        SELECT p.*, b.name AS book_name
-        FROM passages p
+        SELECT v.verse, v.display_text, b.name AS book_name
+        FROM verses v
         JOIN books b
-          ON b.translation_id = p.translation_id
-          AND b.number = p.book_number
-        WHERE p.translation_id = ?
-          AND p.book_number = ?
-          AND p.chapter = ?
-          AND p.start_verse = p.end_verse
-        ORDER BY p.start_verse
+          ON b.translation_id = v.translation_id
+          AND b.number = v.book_number
+        WHERE v.translation_id = ?
+          AND v.book_number = ?
+          AND v.chapter = ?
+        ORDER BY v.verse
       ''',
       [translationId, reference.book, reference.chapter],
     );
     final first = rows.indexWhere(
-      (row) => (row['start_verse']! as int) == reference.startVerse,
+      (row) => (row['verse']! as int) == reference.startVerse,
     );
     final last = rows.indexWhere(
-      (row) => (row['end_verse']! as int) == reference.endVerse,
+      (row) => (row['verse']! as int) == reference.endVerse,
     );
     if (first < 0 || last < first) return null;
     final startIndex = (first - before).clamp(0, rows.length - 1);
@@ -135,112 +158,115 @@ class SqliteBibleRepository implements BibleRepository {
     final selected = rows.sublist(startIndex, endIndex + 1);
     return _combine(
       selected,
-      selected.first['start_verse']! as int,
-      selected.last['end_verse']! as int,
+      ScriptureReference(
+        book: reference.book,
+        chapter: reference.chapter,
+        startVerse: selected.first['verse']! as int,
+        endVerse: selected.last['verse']! as int,
+      ),
     );
   }
 
   @override
-  Future<String> fingerprint() async {
-    final versionRows = await _database.rawQuery('PRAGMA user_version');
-    final schemaVersion = versionRows.single.values.single! as int;
-    final verses = await _database.rawQuery('''
-      SELECT translation_id, book_number, chapter, start_verse, end_verse,
-        display_text
-      FROM passages
-      WHERE start_verse = end_verse
-      ORDER BY translation_id COLLATE BINARY, book_number, chapter,
-        start_verse, end_verse
-    ''');
-    final bytes = BytesBuilder(copy: false)
-      ..add(_lengthPrefixed('$schemaVersion'));
-    for (final verse in verses) {
-      for (final field in [
-        verse['translation_id'],
-        verse['book_number'],
-        verse['chapter'],
-        verse['start_verse'],
-        verse['end_verse'],
-        verse['display_text'],
-      ]) {
-        bytes.add(_lengthPrefixed('$field'));
-      }
-    }
-    return sha256.convert(bytes.takeBytes()).toString();
-  }
+  Future<String> fingerprint() async => _fingerprint;
 
   @override
   Future<void> close() => _database.close();
-
-  Future<List<Map<String, Object?>>> _individualVerses(
-    String translationId,
-    ScriptureReference reference,
-  ) {
-    return _database.rawQuery(
-      '''
-        SELECT p.*, b.name AS book_name
-        FROM passages p
-        JOIN books b
-          ON b.translation_id = p.translation_id
-          AND b.number = p.book_number
-        WHERE p.translation_id = ?
-          AND p.book_number = ?
-          AND p.chapter = ?
-          AND p.start_verse = p.end_verse
-          AND p.start_verse BETWEEN ? AND ?
-        ORDER BY p.start_verse
-      ''',
-      [
-        translationId,
-        reference.book,
-        reference.chapter,
-        reference.startVerse,
-        reference.endVerse,
-      ],
-    );
-  }
 }
 
-Uint8List _lengthPrefixed(String value) {
-  final valueBytes = utf8.encode(value);
-  final result = Uint8List(4 + valueBytes.length);
-  ByteData.sublistView(result).setUint32(0, valueBytes.length, Endian.little);
-  result.setRange(4, result.length, valueBytes);
-  return result;
+Future<SqliteBibleRepository> _openValidated(
+  DatabaseFactory factory,
+  String databasePath,
+  CorpusManifest manifest, {
+  bool checkIntegrity = false,
+}) async {
+  final database = await factory.openDatabase(
+    databasePath,
+    options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+  );
+  try {
+    final version = await database.rawQuery('PRAGMA user_version');
+    if (version.single.values.single != corpusSchemaVersion) {
+      throw const FormatException('Unsupported Bible database schema');
+    }
+    final metadataRows = await database.query('metadata');
+    final metadata = {
+      for (final row in metadataRows)
+        row['key'] as String: row['value'] as String,
+    };
+    if (metadata['schema_version'] != '$corpusSchemaVersion' ||
+        metadata['fingerprint_contract'] != '$corpusFingerprintContract' ||
+        metadata['corpus_fingerprint'] != manifest.corpusFingerprint) {
+      throw const FormatException('Bible database metadata does not match');
+    }
+    final translations = await database.query(
+      'translations',
+      columns: ['id'],
+      orderBy: 'id COLLATE BINARY',
+    );
+    final translationIds = translations
+        .map((row) => row['id']! as String)
+        .toList(growable: false);
+    if (!_sameStrings(translationIds, manifest.translationIds)) {
+      throw const FormatException('Bible database translations do not match');
+    }
+    if (checkIntegrity) {
+      final result = await database.rawQuery('PRAGMA quick_check');
+      if (result.length != 1 || result.single.values.single != 'ok') {
+        throw const FormatException('Bible database integrity check failed');
+      }
+    }
+    return SqliteBibleRepository._(database, manifest.corpusFingerprint);
+  } catch (_) {
+    await database.close();
+    rethrow;
+  }
 }
 
 bool _covers(List<Map<String, Object?>> rows, int start, int end) {
   if (rows.length != end - start + 1) return false;
   for (var index = 0; index < rows.length; index++) {
-    if (rows[index]['start_verse'] != start + index) return false;
+    if (rows[index]['verse'] != start + index) return false;
   }
   return true;
 }
 
-Passage _passageFromRow(Map<String, Object?> row) {
+Passage _combine(
+  List<Map<String, Object?>> rows,
+  ScriptureReference reference,
+) {
+  final verseLabel = reference.startVerse == reference.endVerse
+      ? '${reference.startVerse}'
+      : '${reference.startVerse}–${reference.endVerse}';
   return Passage(
-    reference: ScriptureReference(
-      book: row['book_number']! as int,
-      chapter: row['chapter']! as int,
-      startVerse: row['start_verse']! as int,
-      endVerse: row['end_verse']! as int,
-    ),
-    label: row['label']! as String,
-    text: row['display_text']! as String,
+    reference: reference,
+    label: '${rows.first['book_name']} ${reference.chapter}:$verseLabel',
+    text: rows.map((row) => row['display_text']! as String).join(' '),
   );
 }
 
-Passage _combine(List<Map<String, Object?>> rows, int start, int end) {
-  final chapter = rows.first['chapter']! as int;
-  final verseLabel = start == end ? '$start' : '$start–$end';
-  return Passage(
-    reference: ScriptureReference(
-      book: rows.first['book_number']! as int,
-      chapter: chapter,
-      startVerse: start,
-      endVerse: end,
-    ),
-    label: '${rows.first['book_name']} $chapter:$verseLabel',
-    text: rows.map((row) => row['display_text']! as String).join(' '),
-  );
+Future<bool> _matchesInstalled(
+  File database,
+  File marker,
+  CorpusManifest manifest,
+) async {
+  if (!await database.exists() || !await marker.exists()) return false;
+  if (await database.length() != manifest.databaseBytes) return false;
+  try {
+    return await marker.readAsString() == manifest.encode();
+  } on FileSystemException {
+    return false;
+  }
+}
+
+Future<void> _deleteIfPresent(File file) async {
+  if (await file.exists()) await file.delete();
+}
+
+bool _sameStrings(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
