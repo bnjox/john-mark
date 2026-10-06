@@ -52,6 +52,7 @@ app.*.map.json
 /private/evaluation/
 /private/models/
 /assets/bibles.db
+/assets/bibles.manifest.json
 /assets/semantic/*
 !/assets/semantic/.gitkeep
 *.env

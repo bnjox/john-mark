@@ -41,7 +41,10 @@ class SemanticSearchService extends ChangeNotifier
 
   Future<void> _initialize() async {
     try {
-      final components = await _loadAssets();
+      final components = await tracePerformance(
+        'startup.semantic_ready',
+        _loadAssets,
+      );
       if (_disposed) {
         await components.embedder.dispose();
         await components.index.dispose();

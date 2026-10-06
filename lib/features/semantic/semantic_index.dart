@@ -28,23 +28,22 @@ class SemanticIndex implements SemanticVectorIndex {
 
   static Future<SemanticIndex> loadAsset(
     String assetPath, {
-    required RootIsolateToken rootIsolateToken,
     required String expectedModelId,
     required String expectedModelRevision,
     required int expectedDimensions,
     required String expectedBibleFingerprint,
     required Iterable<String> expectedTranslationIds,
-  }) => _start(
-    _WorkerConfig.asset(
-      assetPath: assetPath,
-      rootIsolateToken: rootIsolateToken,
+  }) async {
+    final data = await rootBundle.load(assetPath);
+    return fromBytes(
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       expectedModelId: expectedModelId,
       expectedModelRevision: expectedModelRevision,
       expectedDimensions: expectedDimensions,
       expectedBibleFingerprint: expectedBibleFingerprint,
-      expectedTranslationIds: expectedTranslationIds.toList(growable: false),
-    ),
-  );
+      expectedTranslationIds: expectedTranslationIds,
+    );
+  }
 
   static Future<SemanticIndex> fromBytes(
     Uint8List bytes, {
@@ -173,7 +172,7 @@ void _validateQuery(List<double> query, int dimensions) {
 Future<void> _runWorker(_WorkerConfig config) async {
   final events = config.events!;
   try {
-    final bytes = await _loadBytes(config);
+    final bytes = _loadBytes(config);
     final index = _WorkerIndex.parse(bytes, config);
     final requests = ReceivePort();
     events.send(_WorkerReady(requests.sendPort));
@@ -192,23 +191,8 @@ Future<void> _runWorker(_WorkerConfig config) async {
   }
 }
 
-Future<Uint8List> _loadBytes(_WorkerConfig config) async {
-  final transferable = config.bytes;
-  if (transferable != null) return transferable.materialize().asUint8List();
-  final token = config.rootIsolateToken;
-  final assetPath = config.assetPath;
-  if (token == null || assetPath == null) {
-    throw StateError('Semantic index worker has no asset source');
-  }
-  BackgroundIsolateBinaryMessenger.ensureInitialized(token);
-  final encoded = utf8.encode(Uri(path: assetPath).path);
-  final data = await BackgroundIsolateBinaryMessenger.instance.send(
-    'flutter/assets',
-    ByteData.sublistView(Uint8List.fromList(encoded)),
-  );
-  if (data == null) throw StateError('Semantic index asset is unavailable');
-  return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-}
+Uint8List _loadBytes(_WorkerConfig config) =>
+    config.bytes.materialize().asUint8List();
 
 class _WorkerIndex {
   _WorkerIndex._({
@@ -382,8 +366,6 @@ class _ScoredRow {
 class _WorkerConfig {
   const _WorkerConfig._({
     required this.events,
-    required this.assetPath,
-    required this.rootIsolateToken,
     required this.bytes,
     required this.expectedModelId,
     required this.expectedModelRevision,
@@ -391,26 +373,6 @@ class _WorkerConfig {
     required this.expectedBibleFingerprint,
     required this.expectedTranslationIds,
   });
-
-  factory _WorkerConfig.asset({
-    required String assetPath,
-    required RootIsolateToken rootIsolateToken,
-    required String expectedModelId,
-    required String expectedModelRevision,
-    required int expectedDimensions,
-    required String expectedBibleFingerprint,
-    required List<String> expectedTranslationIds,
-  }) => _WorkerConfig._(
-    events: null,
-    assetPath: assetPath,
-    rootIsolateToken: rootIsolateToken,
-    bytes: null,
-    expectedModelId: expectedModelId,
-    expectedModelRevision: expectedModelRevision,
-    expectedDimensions: expectedDimensions,
-    expectedBibleFingerprint: expectedBibleFingerprint,
-    expectedTranslationIds: expectedTranslationIds,
-  );
 
   factory _WorkerConfig.bytes({
     required TransferableTypedData bytes,
@@ -421,8 +383,6 @@ class _WorkerConfig {
     required List<String> expectedTranslationIds,
   }) => _WorkerConfig._(
     events: null,
-    assetPath: null,
-    rootIsolateToken: null,
     bytes: bytes,
     expectedModelId: expectedModelId,
     expectedModelRevision: expectedModelRevision,
@@ -432,9 +392,7 @@ class _WorkerConfig {
   );
 
   final SendPort? events;
-  final String? assetPath;
-  final RootIsolateToken? rootIsolateToken;
-  final TransferableTypedData? bytes;
+  final TransferableTypedData bytes;
   final String expectedModelId;
   final String expectedModelRevision;
   final int expectedDimensions;
@@ -443,8 +401,6 @@ class _WorkerConfig {
 
   _WorkerConfig withEvents(SendPort value) => _WorkerConfig._(
     events: value,
-    assetPath: assetPath,
-    rootIsolateToken: rootIsolateToken,
     bytes: bytes,
     expectedModelId: expectedModelId,
     expectedModelRevision: expectedModelRevision,

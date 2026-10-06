@@ -1,5 +1,7 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
+
 Future<T> tracePerformance<T>(
   String name,
   Future<T> Function() operation,
@@ -14,6 +16,7 @@ Future<T> tracePerformance<T>(
     final duration = stopwatch.elapsedMilliseconds;
     timeline.finish(arguments: {'durationMs': duration});
     developer.log('$name duration_ms=$duration', name: 'john_mark.performance');
+    debugPrint('john_mark.performance $name duration_ms=$duration');
   }
 }
 
@@ -21,5 +24,8 @@ void recordPerformance(String name, Duration duration) {
   developer.log(
     '$name duration_ms=${duration.inMilliseconds}',
     name: 'john_mark.performance',
+  );
+  debugPrint(
+    'john_mark.performance $name duration_ms=${duration.inMilliseconds}',
   );
 }

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'core/models.dart';
@@ -77,7 +76,6 @@ Future<SemanticComponents> _loadSemanticComponents(
   final fingerprint = await repository.fingerprint();
   final index = await SemanticIndex.loadAsset(
     'assets/semantic/scripture_embeddings.bin',
-    rootIsolateToken: RootIsolateToken.instance!,
     expectedModelId: modelId,
     expectedModelRevision: modelRevision,
     expectedDimensions: dimensions,

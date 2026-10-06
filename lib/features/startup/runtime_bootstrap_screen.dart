@@ -12,38 +12,59 @@ class RuntimeBootstrapScreen extends StatefulWidget {
 }
 
 class _RuntimeBootstrapScreenState extends State<RuntimeBootstrapScreen> {
-  late Future<Widget> _home;
+  Future<Widget>? _home;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(_load);
+    });
   }
 
   void _load() {
-    _home = Future.sync(widget.loadHome);
+    final home = Future.sync(widget.loadHome);
+    home.ignore();
+    _home = home;
   }
 
   @override
   Widget build(BuildContext context) {
+    final home = _home;
+    if (home == null) return const _StartupScaffold();
     return FutureBuilder<Widget>(
-      future: _home,
+      future: home,
       builder: (context, snapshot) {
         if (snapshot.hasData) return snapshot.data!;
-        return Scaffold(
-          appBar: AppBar(title: const Text('John Mark')),
-          body: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: snapshot.hasError
-                    ? _StartupFailure(onRetry: () => setState(_load))
-                    : const _StartupProgress(),
-              ),
-            ),
-          ),
+        return _StartupScaffold(
+          failure: snapshot.hasError,
+          onRetry: () => setState(_load),
         );
       },
+    );
+  }
+}
+
+class _StartupScaffold extends StatelessWidget {
+  const _StartupScaffold({this.failure = false, this.onRetry});
+
+  final bool failure;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('John Mark')),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: failure
+                ? _StartupFailure(onRetry: onRetry!)
+                : const _StartupProgress(),
+          ),
+        ),
+      ),
     );
   }
 }

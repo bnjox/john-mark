@@ -20,7 +20,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     loading.complete(const Scaffold(body: Text('Ready')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Ready'), findsOneWidget);
   });
 
@@ -38,7 +38,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Scripture library unavailable'), findsOneWidget);
     await tester.tap(find.text('Retry'));
