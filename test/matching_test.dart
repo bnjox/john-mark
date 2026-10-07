@@ -100,6 +100,79 @@ void main() {
       expect(semantic.queries, isEmpty);
     });
 
+    test(
+      'matches the newest segment without unrelated preceding speech',
+      () async {
+        const latest = 'God loved the world and gave his son';
+        const window = 'Good morning everyone.\n$latest\n';
+        final semantic = _FakeSemanticRetriever(
+          const [],
+          hitsByQuery: {
+            latest: [
+              SemanticHit(
+                reference: john316.reference,
+                translationId: 'alpha',
+                score: 0.86,
+              ),
+            ],
+            window: [
+              SemanticHit(
+                reference: corinthians.reference,
+                translationId: 'alpha',
+                score: 0.91,
+              ),
+            ],
+          },
+        );
+        final matcher = _matcher(
+          passages: [john316, corinthians],
+          semantic: semantic,
+        );
+
+        final update = await matcher.match(window);
+
+        expect(update?.featured?.passage, john316);
+        expect(semantic.queries, [latest]);
+      },
+    );
+
+    test(
+      'falls back to the window for a paraphrase split across segments',
+      () async {
+        const latest = 'and gave his son';
+        const window = 'God loved the world\n$latest';
+        final semantic = _FakeSemanticRetriever(
+          const [],
+          hitsByQuery: {
+            latest: [
+              SemanticHit(
+                reference: corinthians.reference,
+                translationId: 'alpha',
+                score: 0.819,
+              ),
+            ],
+            window: [
+              SemanticHit(
+                reference: john316.reference,
+                translationId: 'alpha',
+                score: 0.82,
+              ),
+            ],
+          },
+        );
+        final matcher = _matcher(
+          passages: [john316, corinthians],
+          semantic: semantic,
+        );
+
+        final update = await matcher.match(window);
+
+        expect(update?.featured?.passage, john316);
+        expect(update?.alternatives, isEmpty);
+        expect(semantic.queries, [latest, window]);
+      },
+    );
+
     test('ranks, deduplicates, and thresholds semantic results', () async {
       final psalms = [
         for (var verse = 1; verse <= 4; verse++)
@@ -245,9 +318,14 @@ class _FakeBibleRepository implements BibleRepository {
 }
 
 class _FakeSemanticRetriever implements SemanticRetriever {
-  _FakeSemanticRetriever(this.hits, {this.status = SemanticStatus.ready});
+  _FakeSemanticRetriever(
+    this.hits, {
+    this.status = SemanticStatus.ready,
+    this.hitsByQuery = const {},
+  });
 
   final List<SemanticHit> hits;
+  final Map<String, List<SemanticHit>> hitsByQuery;
   @override
   final SemanticStatus status;
   final List<String> queries = [];
@@ -255,6 +333,6 @@ class _FakeSemanticRetriever implements SemanticRetriever {
   @override
   Future<List<SemanticHit>> search(String text, {int limit = 8}) async {
     queries.add(text);
-    return hits.take(limit).toList(growable: false);
+    return (hitsByQuery[text] ?? hits).take(limit).toList(growable: false);
   }
 }

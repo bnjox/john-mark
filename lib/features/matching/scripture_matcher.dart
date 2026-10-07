@@ -41,7 +41,13 @@ class ScriptureMatcher {
     }
 
     if (semanticRetriever.status == SemanticStatus.unavailable) return null;
-    final hits = await semanticRetriever.search(finalizedText, limit: 8);
+    var hits = await semanticRetriever.search(latestText, limit: 8);
+    // Earlier speech can dilute a complete paraphrase. Use the full window
+    // only when the newest segment cannot stand on its own.
+    if (!hits.any((hit) => hit.score >= _semanticThreshold) &&
+        latestText.trim() != finalizedText.trim()) {
+      hits = await semanticRetriever.search(finalizedText, limit: 8);
+    }
     final strongest = <ScriptureReference, SemanticHit>{};
     for (final hit in hits) {
       if (hit.score < _alternativeSemanticThreshold) continue;
