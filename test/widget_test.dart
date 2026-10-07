@@ -55,7 +55,7 @@ void main() {
     expect(find.text('Ready'), findsOneWidget);
     expect(
       find.text('Matches all bundled translations · Displays NKJV'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Start Listening'), findsOneWidget);
 

@@ -115,7 +115,6 @@ class _ListenerScreenState extends State<ListenerScreen>
                 valueListenable: widget.semanticStatus,
                 builder: (context, semanticStatus, _) => _ReadyView(
                   state: state,
-                  displayTranslation: widget.displayTranslation,
                   semanticStatus: semanticStatus,
                   serviceConfigured: widget.serviceConfigured,
                   onStart: widget.controller.start,
@@ -137,14 +136,12 @@ class _ListenerScreenState extends State<ListenerScreen>
 class _ReadyView extends StatelessWidget {
   const _ReadyView({
     required this.state,
-    required this.displayTranslation,
     required this.semanticStatus,
     required this.serviceConfigured,
     required this.onStart,
   });
 
   final ListenerViewState state;
-  final Translation displayTranslation;
   final SemanticStatus semanticStatus;
   final bool serviceConfigured;
   final VoidCallback onStart;
@@ -153,7 +150,6 @@ class _ReadyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final canStart = serviceConfigured;
     final colors = Theme.of(context).colorScheme;
-    final displayName = _displayName(displayTranslation);
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
@@ -168,19 +164,6 @@ class _ReadyView extends StatelessWidget {
                 children: [
                   _StatusLine(phase: state.phase, elapsed: state.elapsed),
                   const SizedBox(height: 32),
-                  Semantics(
-                    container: true,
-                    label:
-                        'Matches all bundled translations. Displays $displayName.',
-                    child: Text(
-                      'Matches all bundled translations · Displays $displayName',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
                   Text(
                     'Microphone',
                     style: Theme.of(context).textTheme.titleMedium,
@@ -456,9 +439,6 @@ String _formatDuration(Duration duration) {
   final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
   return '$hours:$minutes:$seconds';
 }
-
-String _displayName(Translation translation) =>
-    _isNkjv(translation) ? 'NKJV' : translation.name;
 
 bool _isNkjv(Translation translation) {
   final id = translation.id.trim().toLowerCase();

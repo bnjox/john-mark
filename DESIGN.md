@@ -140,9 +140,7 @@ The recurring form language is softly restrained: 12dp corners for supporting pa
 
 ### Matching Summary
 
-The ready state contains no translation selector. One supporting semantic block
-states that matching uses all bundled translations and names the fixed display
-translation: NKJV when available, otherwise the deterministic fallback. If
+The ready state contains no translation selector or translation-summary note. If
 semantic matching is unavailable, explain neutrally that quotation matching
 remains active; do not style this as a fatal service error or disable Start.
 
@@ -174,7 +172,7 @@ Surrounding context opens in a scroll-controlled native modal bottom sheet. It u
 - **Do** preserve wrapping, scrolling, semantic containers, descriptive control labels, and 48dp minimum interactive targets.
 - **Do** stop listening when the app leaves the foreground, disable the wakelock, and present any retained result as stale when the state says it is stale.
 - **Do** keep live transcript and passage history ephemeral and explain that behavior in the ready state.
-- **Do** name the display translation and explain that every bundled translation contributes matching evidence.
+- **Do** keep translation details out of the ready state.
 
 ### Don't:
 
